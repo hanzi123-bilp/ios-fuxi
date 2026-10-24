@@ -1,16 +1,19 @@
 --- a/bsd/dev/sweet_ufs.c
 +++ b/bsd/dev/sweet_ufs.c
-@@ -740,10 +740,13 @@
- 	su.bmajor = bdevsw_add(-1, &sweet_ufs_bdevsw);
- 	if (su.bmajor < 0) {
-+		printf("SWEET UFS: bdevsw_add failed\n");
- 		return ENXIO;
- 	}
- 	su.cmajor = cdevsw_add_with_bdev(-1, &sweet_ufs_cdevsw, su.bmajor);
- 	if (su.cmajor < 0) {
-+		printf("SWEET UFS: cdevsw_add failed\n");
- 		return ENXIO;
- 	}
- 	su.bdev = makedev(su.bmajor, 0);
-+	printf("SWEET UFS: root device major %d\n", su.bmajor);
- 	devfs_make_node(su.bdev, DEVFS_BLOCK, UID_ROOT, GID_OPERATOR, 0640, "ufsroot0");
+@@ -480,7 +480,8 @@
+ static int
+ sweet_ufs_init(void)
+ {
++	panic("SUFS bp0 entry");
+ 	DTEntry node;
+ 	uintptr_t const *reg = NULL;
+ 	unsigned int size = 0;
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -735,6 +735,7 @@
+ 	su.dma_pa = ptoa_64(pn);
+ 	su.lun = 0;
+ 	su.secsize = DEV_BSIZE;
++	panic("SUFS bp1 dma ok pa 0x%llx", su.dma_pa);
+ 
+ 	lck_mtx_lock(&sweet_ufs_lock);
