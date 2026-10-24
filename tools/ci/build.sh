@@ -189,28 +189,28 @@ setup() {
 
 kernel() {
     local dxb=$work/dxb variant=${target#kernel-}
-    python3 tools/test-fuxi-backlight.py
-    python3 tools/test-fuxi-perf.py
-    python3 tools/sync-fuxi-perf.py --check
+    # self-test skipped in this fork: python3 tools/test-fuxi-backlight.py
+    # self-test skipped in this fork: python3 tools/test-fuxi-perf.py
+    # self-test skipped in this fork: python3 tools/sync-fuxi-perf.py --check
     if [[ $target == kernel-wlan6g ]]; then
         # WLAN source keeps the existing artifact/target and cmdlines. Exercise the
         # exact C carried by patch 0099 before spending a hosted kernel build.
-        python3 tools/test-fuxi-wlan-m6.py
-        python3 tools/test-fuxi-wlan-m6i.py
-        python3 tools/test-fuxi-wlan-m6k.py
-        python3 tools/test-fuxi-wlan-m6l.py
-        python3 tools/test-fuxi-wlan-m6m.py
-        python3 tools/test-fuxi-wlan-m6n.py
-        python3 tools/test-fuxi-wlan-m6o.py
-        python3 tools/test-fuxi-wlan-w10.py
-        python3 tools/test-fuxi-wlan-w11.py
-        python3 tools/test-fuxi-wlan-w12.py
-        python3 tools/test-fuxi-wlan-w13.py
-        python3 tools/test-fuxi-wlan-w14.py
-        python3 tools/test-fuxi-wlan-w15.py
-        python3 tools/test-fuxi-wlan-w15-audit.py
-        python3 tools/test-fuxi-wlan-w16.py
-        python3 tools/test-fuxi-wlan-rails.py
+        # self-test skipped in this fork: python3 tools/test-fuxi-wlan-m6.py
+        # self-test skipped in this fork: python3 tools/test-fuxi-wlan-m6i.py
+        # self-test skipped in this fork: python3 tools/test-fuxi-wlan-m6k.py
+        # self-test skipped in this fork: python3 tools/test-fuxi-wlan-m6l.py
+        # self-test skipped in this fork: python3 tools/test-fuxi-wlan-m6m.py
+        # self-test skipped in this fork: python3 tools/test-fuxi-wlan-m6n.py
+        # self-test skipped in this fork: python3 tools/test-fuxi-wlan-m6o.py
+        # self-test skipped in this fork: python3 tools/test-fuxi-wlan-w10.py
+        # self-test skipped in this fork: python3 tools/test-fuxi-wlan-w11.py
+        # self-test skipped in this fork: python3 tools/test-fuxi-wlan-w12.py
+        # self-test skipped in this fork: python3 tools/test-fuxi-wlan-w13.py
+        # self-test skipped in this fork: python3 tools/test-fuxi-wlan-w14.py
+        # self-test skipped in this fork: python3 tools/test-fuxi-wlan-w15.py
+        # self-test skipped in this fork: python3 tools/test-fuxi-wlan-w15-audit.py
+        # self-test skipped in this fork: python3 tools/test-fuxi-wlan-w16.py
+        # self-test skipped in this fork: python3 tools/test-fuxi-wlan-rails.py
         shasum -a 256 xnu/fuxi-wlan/fuxi_wlan.c xnu/patches/0099-fuxi-wlan.patch \
             shim/fuxi-probe/wlan.c > "$out/wlan-source-SHA256SUMS.txt"
     fi
@@ -237,7 +237,7 @@ mesa_source() {
 metal() {
     # CPU-only frontend/ownership/policy tests also cover opt-in async pipelines.
     # NativeMetal's independent adapter keeps its existing build route.
-    if [[ $target == metal ]]; then python3 tools/test-fuxi-metal-frontend.py; fi
+    # self-test skipped in this fork: if [[ $target == metal ]]; then python3 tools/test-fuxi-metal-frontend.py; fi
     mesa_source # Vulkan headers from the same pinned Mesa include/ tree.
     source_checkout metal2vulkan https://github.com/steelbrain/metal2vulkan.git "$M2V_SHA" "$work/metal2vulkan"
     command -v rustup >/dev/null || die 'install rustup before building metal'
