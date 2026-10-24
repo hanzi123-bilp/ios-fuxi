@@ -23,7 +23,7 @@ def function(name, code=source):
 
 
 subprocess.run(['python3', str(ROOT / 'tools/sync-fuxi-backlight.py'), '--check'], check=True)
-    print('note: unixnu sync self-check skipped for this fork')
+# unixnu sync self-check skipped for this fork
 assert source.startswith('/*') and '#if defined(FUXI)' in source
 gate = function('fuxi_backlight_publish')
 assert gate.index('PE_parse_boot_argn("fuxibacklight"') < gate.index('if (!fbl_enabled(present, enable)) return;')
