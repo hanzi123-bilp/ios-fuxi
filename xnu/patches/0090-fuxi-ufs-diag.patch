@@ -1,0 +1,16 @@
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -700,14 +700,16 @@
+ 	su.bmajor = bdevsw_add(-1, &sweet_ufs_bdevsw);
+ 	if (su.bmajor < 0) {
++		printf("SWEET UFS: bdevsw_add failed\n");
+ 		return ENXIO;
+ 	}
+ 	su.cmajor = cdevsw_add_with_bdev(-1, &sweet_ufs_cdevsw, su.bmajor);
+ 	if (su.cmajor < 0) {
++		printf("SWEET UFS: cdevsw_add failed\n");
+ 		return ENXIO;
+ 	}
+ 	su.bdev = makedev(su.bmajor, 0);
++	printf("SWEET UFS: root device major %d\n", su.bmajor);
+ 	devfs_make_node(su.bdev, DEVFS_BLOCK, UID_ROOT, GID_OPERATOR, 0640, "ufsroot0");
