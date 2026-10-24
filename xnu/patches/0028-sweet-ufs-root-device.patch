@@ -259,7 +259,7 @@ new file mode 100644
 +	}
 +	if (memcmp(b, "EFI PART", 8) != 0) {
 +		printf("SWEET UFS: LUN %u has no GPT\n", su.lun);
-+		return ENXIO;
++		return (panic("SWEET UFS ENXIO at %d", __LINE__), ENXIO);
 +	}
 +	uint64_t entry_lba;
 +	uint32_t nent, esz;
@@ -268,7 +268,7 @@ new file mode 100644
 +	memcpy(&esz, b + 84, 4);
 +	if (esz != 128 || nent == 0 || nent * esz > BOUNCE_SIZE) {
 +		printf("SWEET UFS: unsupported GPT entries %u x %u\n", nent, esz);
-+		return ENXIO;
++		return (panic("SWEET UFS ENXIO at %d", __LINE__), ENXIO);
 +	}
 +	error = ufs_read_blocks(entry_lba, (nent * esz + UFS_BLOCK - 1) / UFS_BLOCK);
 +	if (error) {
@@ -293,7 +293,7 @@ new file mode 100644
 +		memcpy(&first, e + 32, 8);
 +		memcpy(&last, e + 40, 8);
 +		if (last < first) {
-+			return ENXIO;
++			return (panic("SWEET UFS ENXIO at %d", __LINE__), ENXIO);
 +		}
 +		su.first_block = first;
 +		su.nblocks = last - first + 1;
@@ -309,7 +309,7 @@ new file mode 100644
 +	uint32_t hce = ufs_rd(REG_HCE), hcs = ufs_rd(REG_HCS);
 +	if (!(hce & 1) || !(hcs & HCS_DP) || !(hcs & HCS_UTRLRDY)) {
 +		printf("SWEET UFS: host not ready (hce 0x%x hcs 0x%x)\n", hce, hcs);
-+		return ENXIO;
++		return (panic("SWEET UFS ENXIO at %d", __LINE__), ENXIO);
 +	}
 +	if (ufs_rd(REG_UTRLDBR)) {
 +		printf("SWEET UFS: requests outstanding from the bootloader\n");
@@ -335,7 +335,7 @@ new file mode 100644
 +sweet_ufs_open(__unused dev_t dev, int flags, __unused int devtype, __unused struct proc *p)
 +{
 +	if (!su.ready) {
-+		return ENXIO;
++		return (panic("SWEET UFS ENXIO at %d", __LINE__), ENXIO);
 +	}
 +	return (flags & FWRITE) ? EROFS : 0;
 +}
@@ -511,7 +511,7 @@ new file mode 100644
 +	    SecureDTGetProperty(node, "reg", (void const **)&reg, &size) != kSuccess ||
 +	    size < 2 * sizeof(uintptr_t)) {
 +		printf("SWEET UFS: no /sweet-ufs node in the device tree\n");
-+		return ENXIO;
++		return (panic("SWEET UFS ENXIO at %d", __LINE__), ENXIO);
 +	}
 +	PE_parse_boot_argn("ufsroot", want, sizeof(want));
 +
@@ -547,11 +547,11 @@ new file mode 100644
 +
 +	su.bmajor = bdevsw_add(-1, &sweet_ufs_bdevsw);
 +	if (su.bmajor < 0) {
-+		return ENXIO;
++		return (panic("SWEET UFS ENXIO at %d", __LINE__), ENXIO);
 +	}
 +	su.cmajor = cdevsw_add_with_bdev(-1, &sweet_ufs_cdevsw, su.bmajor);
 +	if (su.cmajor < 0) {
-+		return ENXIO;
++		return (panic("SWEET UFS ENXIO at %d", __LINE__), ENXIO);
 +	}
 +	su.bdev = makedev(su.bmajor, 0);
 +	devfs_make_node(su.bdev, DEVFS_BLOCK, UID_ROOT, GID_OPERATOR, 0640, "ufsroot0");
