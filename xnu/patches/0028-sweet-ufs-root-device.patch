@@ -41,7 +41,7 @@ diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
 new file mode 100644
 --- /dev/null
 +++ b/bsd/dev/sweet_ufs.c
-@@ -0,0 +1,536 @@
+@@ -0,0 +1,539 @@
 +/*
 + * SWEET internal UFS root device (read-only).
 + *
@@ -542,15 +542,18 @@ new file mode 100644
 +	}
 +	lck_mtx_unlock(&sweet_ufs_lock);
 +	if (error) {
++		printf("SWEET UFS: init step failed %d\n", error);
 +		return error;
 +	}
 +
 +	su.bmajor = bdevsw_add(-1, &sweet_ufs_bdevsw);
 +	if (su.bmajor < 0) {
++		printf("SWEET UFS: bdevsw_add failed\n");
 +		return ENXIO;
 +	}
 +	su.cmajor = cdevsw_add_with_bdev(-1, &sweet_ufs_cdevsw, su.bmajor);
 +	if (su.cmajor < 0) {
++		printf("SWEET UFS: cdevsw_add failed\n");
 +		return ENXIO;
 +	}
 +	su.bdev = makedev(su.bmajor, 0);
