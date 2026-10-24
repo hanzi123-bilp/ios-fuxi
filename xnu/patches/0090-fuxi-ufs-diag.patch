@@ -1,6 +1,6 @@
 --- a/bsd/dev/sweet_ufs.c
 +++ b/bsd/dev/sweet_ufs.c
-@@ -700,14 +700,16 @@
+@@ -740,10 +740,13 @@
  	su.bmajor = bdevsw_add(-1, &sweet_ufs_bdevsw);
  	if (su.bmajor < 0) {
 +		printf("SWEET UFS: bdevsw_add failed\n");
