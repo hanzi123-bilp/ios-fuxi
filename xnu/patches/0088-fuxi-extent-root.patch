@@ -177,11 +177,12 @@
  #endif
  	uint32_t cache = 0, wait = 0;
  	PE_parse_boot_argn("ufscache", &cache, sizeof(cache));
-@@ -687,6 +806,20 @@
+@@ -687,6 +806,21 @@
  	if (!error) {
  		error = ufs_find_partition(want);
  	}
 +#if defined(FUXI)
++	if (error) panic("SWEET UFS find_partition(%s) failed %d", want, error);
 +	if (!error && strcmp(want, "userdata") == 0) {
 +		fx_part_first = su.first_block;
 +		fx_part_blocks = su.nblocks;
