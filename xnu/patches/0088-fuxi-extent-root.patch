@@ -57,12 +57,17 @@
 +	DTEntry chosen;
 +	uint64_t const *ext = NULL, *blocks = NULL;
 +	unsigned int size = 0, bsize = 0;
-+	if (SecureDTLookupEntry(NULL, "/chosen", &chosen) != kSuccess ||
-+	    SecureDTGetProperty(chosen, "fuxi-root-extents", (void const **)&ext, &size) != kSuccess ||
-+	    SecureDTGetProperty(chosen, "fuxi-root-blocks", (void const **)&blocks, &bsize) != kSuccess ||
-+	    bsize != sizeof(uint64_t) || size == 0 || size % (3 * sizeof(uint64_t)) ||
-+	    size / (3 * sizeof(uint64_t)) > FX_MAX_EXTENTS) {
-+		printf("FUXI UFS: no valid fuxi-root-extents in /chosen\n");
++	int step = 0;
++	if (SecureDTLookupEntry(NULL, "/chosen", &chosen) != kSuccess) step = 1;
++	else if (SecureDTGetProperty(chosen, "fuxi-root-extents", (void const **)&ext, &size) != kSuccess) step = 2;
++	else if (SecureDTGetProperty(chosen, "fuxi-root-blocks", (void const **)&blocks, &bsize) != kSuccess) step = 3;
++	else if (bsize != sizeof(uint64_t)) step = 4;
++	else if (size == 0) step = 5;
++	else if (size % (3 * sizeof(uint64_t))) step = 6;
++	else if (size / (3 * sizeof(uint64_t)) > FX_MAX_EXTENTS) step = 7;
++	if (step) {
++		panic("FUXI UFS extent lookup step=%d size=%u bsize=%u max=%d",
++		    step, size, bsize, (int)FX_MAX_EXTENTS);
 +		return ENXIO;
 +	}
 +	unsigned n = size / (3 * sizeof(uint64_t));
