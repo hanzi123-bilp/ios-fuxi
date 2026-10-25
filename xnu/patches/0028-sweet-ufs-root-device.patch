@@ -501,7 +501,7 @@ new file mode 100644
 +static int
 +sweet_ufs_init(void)
 +{
-+	DTEntry node;
++	panic("SUFS entry reached"); DTEntry node;
 +	uintptr_t const *reg = NULL;
 +	unsigned int size = 0;
 +	char want[64] = "userdata";
