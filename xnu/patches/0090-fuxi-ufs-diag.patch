@@ -1,19 +1,10 @@
 --- a/bsd/dev/sweet_ufs.c
 +++ b/bsd/dev/sweet_ufs.c
-@@ -480,7 +480,8 @@
+@@ -500,7 +500,8 @@
  static int
  sweet_ufs_init(void)
  {
-+	panic("SUFS bp0 entry");
++	panic("SUFS entry reached");
  	DTEntry node;
  	uintptr_t const *reg = NULL;
  	unsigned int size = 0;
---- a/bsd/dev/sweet_ufs.c
-+++ b/bsd/dev/sweet_ufs.c
-@@ -735,6 +735,7 @@
- 	su.dma_pa = ptoa_64(pn);
- 	su.lun = 0;
- 	su.secsize = DEV_BSIZE;
-+	panic("SUFS bp1 dma ok pa 0x%llx", su.dma_pa);
- 
- 	lck_mtx_lock(&sweet_ufs_lock);
