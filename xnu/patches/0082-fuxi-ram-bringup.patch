@@ -18,7 +18,7 @@
 +#if defined(FUXI)
 +    /* No Fuxi UFS handoff/SMMU validation yet; first boots use RAM disk. */
 +    printf("FUXI UFS: disabled during RAM-only bring-up\n");
-+    if (0) return ENXIO;
++    return ENXIO;
 +#endif
  	DTEntry node;
  	uintptr_t const *reg = NULL;
