@@ -220,13 +220,13 @@ kernel() {
     # builder installs that KDK on this runner when absent; never cache/upload it.
     (
         cd "$dxb"
-        export MACOS_VERSION=13.5 KERNEL_CONFIG=RELEASE ARCH_CONFIG=ARM64 MACHINE_CONFIG=FUXI
+        export MACOS_VERSION=13.5 KERNEL_CONFIG=DEVELOPMENT ARCH_CONFIG=ARM64 MACHINE_CONFIG=FUXI
         "$native/bin/bash" build.sh
     )
-    cp "$dxb/fakeroot/System/Library/Kernels/kernel.release.fuxi" "$out/"
+    cp "$dxb/fakeroot/System/Library/Kernels/kernel.development.fuxi" "$out/"
     # MakeInc.kernel installs the raw linked kernel into SYMROOT *without* an
     # .unstripped suffix; give it the local packer's conventional output name.
-    cp "$dxb/build/xnu.sym/kernel.release.fuxi" "$out/kernel.release.fuxi.unstripped"
+    cp "$dxb/build/xnu.sym/kernel.development.fuxi" "$out/kernel.development.fuxi.unstripped"
     python3 tools/ci/kernel-inputs.py --variant "$variant" --out "$out"
 }
 
