@@ -318,7 +318,7 @@ static volatile unsigned fg_state; /* 0 disabled/starting, 1 ready, 2 permanentl
  * failure before ready is not a lost userspace context. No recovery yet. */
 static uint64_t fg_faults, fg_suspends;
 static unsigned fg_reset_held;
-static unsigned fg_started, fg_limit, fg_force, fg_seq;
+static unsigned fg_started, fg_limit, fg_force, fg_seq, fg_nozap;
 int fuxi_gpu_ready(void) { return __atomic_load_n(&fg_state, __ATOMIC_ACQUIRE) == 1; }
 static uint64_t fg_deadline, fg_submit_time;
 static unsigned fg_busy, fg_magic;
