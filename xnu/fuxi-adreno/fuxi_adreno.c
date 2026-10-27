@@ -498,7 +498,9 @@ static void fg_thread(thread_call_param_t arg, thread_call_param_t result)
  printf("FUXI GPU: cold bring-up, 32 MiB reserved NC, limit %u\n", fg_limit);
  gpu_probe(fg_limit == 13 ? 13 : 16);
  if (fg_access_failed || gpu_extra[5][4] != 1 ||
-     (fg_limit != 13 && gpu_extra[13][2] != 1)) {
+     (fg_limit != 13 && gpu_extra[13][2] != 1 && !fg_nozap)) {
+  if (gpu_extra[13][2] != 1 && fg_nozap)
+   printf("FUXI GPU: ZAP %#x ignored by fuxi_gpu_nozap=1, continuing\n", gpu_extra[13][2]);
   printf("FUXI GPU: stage %u results clock=%#x GMU=%#x HFI=%#x GX=%#x "
       "CB=%#x CP=%#x fence=%#x zap=%#x clear/copy=%#x\n", gpu_stage,
       gpu_report[65], gpu_extra[0][2], gpu_extra[0][3], gpu_extra[0][60],
@@ -548,6 +550,7 @@ void fuxi_gpu_start(uint64_t fb, unsigned width, unsigned height, unsigned pitch
  }
  (void)PE_parse_boot_argn("fuxigpu_stage", &fg_limit, sizeof(fg_limit));
  (void)PE_parse_boot_argn("fuxigpu_fail", &fg_force, sizeof(fg_force));
+ (void)PE_parse_boot_argn("fuxi_gpu_nozap", &fg_nozap, sizeof(fg_nozap));
  if ((fg_limit != 13 && fg_limit != 16 && fg_limit != 17) ||
      fb != G4_FB_PA || width != 1080 || height != 2400 || pitch != 4320) {
   fg_fail("unsupported boot framebuffer/stage", fg_limit); return;
