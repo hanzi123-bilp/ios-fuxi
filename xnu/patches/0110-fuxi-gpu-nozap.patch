@@ -1,0 +1,19 @@
+--- a/bsd/dev/fuxi_adreno.c
++++ b/bsd/dev/fuxi_adreno.c
+@@ -582,7 +582,9 @@
+- }
+- printf("FUXI GPU: cold bring-up, 32 MiB reserved NC, limit %u\n", fg_limit);
+- gpu_probe(fg_limit == 13 ? 13 : 16);
+- if (fg_access_failed || gpu_extra[5][4] != 1 ||
+-     (fg_limit != 13 && gpu_extra[13][2] != 1)) {
+-  printf("FUXI GPU: stage %u results clock=%#x GMU=%#x HFI=%#x GX=%#x "
+-      "CB=%#x CP=%#x fence=%#x zap=%#x clear/copy=%#x\n", gpu_stage,
++ }
++ printf("FUXI GPU: cold bring-up, 32 MiB reserved NC, limit %u\n", fg_limit);
++ gpu_probe(fg_limit == 13 ? 13 : 16);
++ unsigned nozap = 0;
++ (void)PE_parse_boot_argn("fuxi_gpu_nozap", &nozap, sizeof(nozap));
++ if (fg_access_failed || gpu_extra[5][4] != 1 ||
++     (fg_limit != 13 && gpu_extra[13][2] != 1)) {
++  printf("FUXI GPU: stage %u results clock=%#x GMU=%#x HFI=%#x GX=%#x "
++      "CB=%#x CP=%#x fence=%#x zap=%#x clear/copy=%#x\n", gpu_stage,
