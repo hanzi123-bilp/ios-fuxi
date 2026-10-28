@@ -832,6 +832,7 @@
 +  : "+r"(x0), "+r"(x1), "+r"(x2), "+r"(x3), "+r"(x4), "+r"(x5), "+r"(x6), "+r"(x7)
 +  :: "x8","x9","x10","x11","x12","x13","x14","x15","x16","x17","cc","memory");
 + ret[0] = x0; ret[1] = x1; ret[2] = x2; ret[3] = x3;
++}
 +/* SHM bridge create takes a fourth argument in x5 (the VMID list). */
 +static __attribute__((noinline)) void g5_smc_raw4(uint64_t ret[4], uint32_t fn, uint32_t info,
 +                       uint64_t a, uint64_t b, uint64_t c, uint64_t e)
@@ -850,7 +851,6 @@
 +#define G5_BRIDGE_CREATE 0x1eu
 +#define G5_PERM_RW       6u
 +#define G5_VMID_HLOS     4u
-+}
 +/* Eight fixed slots, including in-flight markers for a non-returning SMC.
 + * First five retain the v8 layout; last three use v9 page15 words16..63.
 + * Each slot: step, fn, arginfo, returned, arg0/arg1 low/high, x0..x3 low/high.
