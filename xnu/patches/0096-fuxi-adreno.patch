@@ -742,7 +742,7 @@
 +#endif
 --- a/bsd/dev/gpu-zap.h
 +++ b/bsd/dev/gpu-zap.h
-@@ -0,0 +1,282 @@
+@@ -0,0 +1,275 @@
 +/* Qualcomm PAS13, Linux6.12 mdt_loader + qcom_scm ARM64 ABI.
 + * Included after gpu_m4. All input remains in the optional, external MBN.
 + * No WAITQ, interrupted-call continuation or TRUST MMIO writes. XNU permits
@@ -909,18 +909,11 @@
 + if (!g5_copy(G5_META_PA, 0, G5_META_BYTES) ||
 +     !g5_copy(G5_META_PA, fw, p->header) ||
 +     !g5_copy(G5_META_PA+p->header, fw+p->hash_off, p->hash_size)) return 0xf09;
-+ /* SM8550: QTEE can only read metadata registered through a SHM bridge. */
 + {
 +  uint64_t br[4];
 +  g5_smc_raw(br, G5_SMC_MP(G5_BRIDGE_ENABLE), 0, 0, 0, 0);
-+  uint64_t en = (br[0] & 0xffffu) | ((br[1] & 0xffffu) << 16);
-+  g5_smc_raw4(br, G5_SMC_MP(G5_BRIDGE_CREATE), 4,
-+      (uint64_t)G5_META_PA | G5_PERM_RW, (uint64_t)G5_META_PA | G5_PERM_RW,
-+      ((uint64_t)G5_META_BYTES | (1u << 9)), G5_VMID_HLOS);
-+  uint64_t cr = (br[0] & 0xffffu) | ((br[1] & 0xffffu) << 16);
-+#ifdef FUXI_GPU_XNU
-+  printf("FUXI GPU ZAP: shm bridge enable=%#llx create=%#llx\n", en, cr);
-+#endif
++  g5_smc_raw4(br, G5_SMC_MP(G5_BRIDGE_CREATE), 4, (uint64_t)G5_META_PA | G5_PERM_RW,
++      (uint64_t)G5_META_PA | G5_PERM_RW, (uint64_t)G5_META_BYTES | (1u << 9), G5_VMID_HLOS);
 + }
 + if (!g5_scm(d, G5_SMC(1), 0x82, G5_PAS, G5_META_PA, 0, 0)) return 0xf07;
 + d[3] = 6;
