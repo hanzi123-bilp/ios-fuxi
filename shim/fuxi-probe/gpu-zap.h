@@ -147,7 +147,7 @@ static int g5_pas(uint32_t *d, const uint8_t *fw, const struct g5_plan *p)
      !g5_copy(G5_META_PA, fw, p->header) ||
      !g5_copy(G5_META_PA+p->header, fw+p->hash_off, p->hash_size)) return 0xf09;
  /* SM8550: QTEE only reads metadata registered through a SHM bridge. */
-static __attribute__((noinline)) void g5_smc_raw4(uint64_t ret[4], uint32_t fn, uint32_t info,
+void g5_smc_raw4(uint64_t ret[4], uint32_t fn, uint32_t info,
     uint64_t a, uint64_t b, uint64_t c, uint64_t e);
 { uint64_t br[4];
   g5_smc_raw(br, (0x42000c00u | 0x1cu) | 0x80000000u, 0, 0, 0, 0);
