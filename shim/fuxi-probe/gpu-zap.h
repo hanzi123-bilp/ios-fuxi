@@ -108,7 +108,7 @@ static int g5_scm(uint32_t *d, uint32_t fn, unsigned info,
 #ifdef FUXI_GPU_XNU
  fg_scm_call(ret, d[5]-1, d[3], fn, info, a, b, c);
 #else
- g5_smc_raw(ret, fn, info, a, b, c);
+ g5_smc_raw(ret, fn | 0x80000000u, info, a, b, c);
 #endif
  for (unsigned i = 0; i < 4; i++) { s[8+i*2] = ret[i]; s[9+i*2] = ret[i]>>32; }
  s[3] = 1;
