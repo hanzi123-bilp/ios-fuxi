@@ -742,7 +742,7 @@
 +#endif
 --- a/bsd/dev/gpu-zap.h
 +++ b/bsd/dev/gpu-zap.h
-@@ -0,0 +1,282 @@
+@@ -0,0 +1,275 @@
 +/* Qualcomm PAS13, Linux6.12 mdt_loader + qcom_scm ARM64 ABI.
 + * Included after gpu_m4. All input remains in the optional, external MBN.
 + * No WAITQ, interrupted-call continuation or TRUST MMIO writes. XNU permits
@@ -878,13 +878,6 @@
 + /* Query x1 is a boolean, not a service status. Record even false/unknown;
 +  * only transport errors stop queries. Real PAS calls require x0=x1=0. */
 + int ok = !ret[0] && (advisory || !ret[1]);
-+ /* Linux sets FAST_CALL (bit31); without it the monitor treats the call as
-+  * preemptible and answers x1=1 instead of the service result. */
-+ if ((fn & 0x80000000u) == 0) {
-+  uint32_t fast = fn | 0x80000000u;
-+  fg_scm_call(ret, d[5]-1, d[3], fast, info, a, b, c);
-+  if (!ret[0]) { for (unsigned i2 = 0; i2 < 4; i2++) { s[8+i2*2] = ret[i2]; s[9+i2*2] = ret[i2]>>32; } }
-+ }
 + if (!ok) d[44] = d[5];
 + return ok;
 +}
