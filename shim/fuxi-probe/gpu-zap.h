@@ -146,7 +146,15 @@ static int g5_pas(uint32_t *d, const uint8_t *fw, const struct g5_plan *p)
  if (!g5_copy(G5_META_PA, 0, G5_META_BYTES) ||
      !g5_copy(G5_META_PA, fw, p->header) ||
      !g5_copy(G5_META_PA+p->header, fw+p->hash_off, p->hash_size)) return 0xf09;
- if (!g5_scm(d, G5_SMC(1), 0x82, G5_PAS, G5_META_PA, 0, 0)) return 0xf07;
+ /* SM8550: QTEE only reads metadata registered through a SHM bridge. */
+static __attribute__((noinline)) void g5_smc_raw4(uint64_t ret[4], uint32_t fn, uint32_t info,
+    uint64_t a, uint64_t b, uint64_t c, uint64_t e);
+{ uint64_t br[4];
+  g5_smc_raw(br, (0x42000c00u | 0x1cu) | 0x80000000u, 0, 0, 0, 0);
+  g5_smc_raw4(br, (0x42000c00u | 0x1eu) | 0x80000000u, 4,
+      (uint64_t)G5_META_PA | 6u, (uint64_t)G5_META_PA | 6u,
+      ((uint64_t)G5_META_BYTES | (1u << 9)), 4u); }
+if (!g5_scm(d, G5_SMC(1), 0x82, G5_PAS, G5_META_PA, 0, 0)) return 0xf07;
  d[3] = 6;
  /* Linux qcom_mdt_pas_init: any valid relocatable LOAD enables setup;
   * args are reserved base and ALIGN(max end,4K)-min paddr, not reservation size. */
@@ -253,4 +261,17 @@ static void gpu_m5(void)
  }
  d[33] = gpu_extra[5][116]; d[34] = gpu_extra[5][110];
  d[35] = gpu_extra[5][111]; d[36] = gpu_extra[5][112];
+}
+
+static __attribute__((noinline)) void g5_smc_raw4(uint64_t ret[4], uint32_t fn, uint32_t info,
+    uint64_t a, uint64_t b, uint64_t c, uint64_t e)
+{
+ register uint64_t x0 __asm__("x0") = fn, x1 __asm__("x1") = info;
+ register uint64_t x2 __asm__("x2") = a, x3 __asm__("x3") = b;
+ register uint64_t x4 __asm__("x4") = c, x5 __asm__("x5") = e;
+ register uint64_t x6 __asm__("x6") = 0, x7 __asm__("x7") = 0;
+ __asm__ volatile("dsb sy\n\tsmc #0\n\tdsb sy"
+  : "+r"(x0), "+r"(x1), "+r"(x2), "+r"(x3), "+r"(x4), "+r"(x5), "+r"(x6), "+r"(x7)
+  :: "x8","x9","x10","x11","x12","x13","x14","x15","x16","x17","cc","memory");
+ ret[0] = x0; ret[1] = x1; ret[2] = x2; ret[3] = x3;
 }
