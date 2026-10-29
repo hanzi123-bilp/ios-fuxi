@@ -742,7 +742,7 @@
 +#endif
 --- a/bsd/dev/gpu-zap.h
 +++ b/bsd/dev/gpu-zap.h
-@@ -0,0 +1,282 @@
+@@ -0,0 +1,286 @@
 +/* Qualcomm PAS13, Linux6.12 mdt_loader + qcom_scm ARM64 ABI.
 + * Included after gpu_m4. All input remains in the optional, external MBN.
 + * No WAITQ, interrupted-call continuation or TRUST MMIO writes. XNU permits
@@ -916,6 +916,10 @@
 +  g5_smc_raw4(br, G5_SMC_MP(G5_BRIDGE_CREATE) | 0x80000000u, 4,
 +      (uint64_t)G5_META_PA | G5_PERM_RW, (uint64_t)G5_META_PA | G5_PERM_RW,
 +      ((uint64_t)G5_META_BYTES | (1u << 9)), G5_VMID_HLOS);
++#ifdef FUXI_GPU_XNU
++  printf("FUXI GPU ZAP: bridge enable=%#llx create=%#llx\n",
++      (unsigned long long)br[0], (unsigned long long)br[1]);
++#endif
 + }
 + if (!g5_scm(d, G5_SMC(1), 0x82, G5_PAS, G5_META_PA, 0, 0)) return 0xf07;
 + d[3] = 6;
