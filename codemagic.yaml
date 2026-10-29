@@ -1,0 +1,37 @@
+workflows:
+  fuxi-kernel:
+    name: Build FUXI XNU kernel
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    environment:
+      xcode: latest
+    scripts:
+      - name: Fetch xnu 8796
+        script: |
+          set -euxo pipefail
+          curl -L --retry 3 -o xnu.tar.gz "https://github.com/apple-oss-distributions/xnu/archive/refs/tags/xnu-8796.121.2.tar.gz"
+          tar xzf xnu.tar.gz
+          mv xnu-8796.121.2 xnu-src
+      - name: Apply the Fuxi patch series
+        script: |
+          set -euxo pipefail
+          cd xnu-src
+          for p in "$CM_BUILD_DIR"/xnu/patches/*.patch; do
+            echo "== $(basename $p)"
+            patch -p1 -f < "$p" || echo "SKIP $p"
+          done
+      - name: Build DEVELOPMENT_ARM64_FUXI
+        script: |
+          set -euxo pipefail
+          cd xnu-src
+          make SDKROOT=macosx ARCH_CONFIGS=ARM64 MACHINE_CONFIGS=FUXI KERNEL_CONFIGS=DEVELOPMENT -j4 || true
+          find . -name "kernel.development.fuxi" -ls
+      - name: Collect
+        script: |
+          set -euxo pipefail
+          mkdir -p artifacts
+          find xnu-src -name "kernel.development.fuxi" -exec cp {} artifacts/ \;
+          ls -l artifacts
+    artifacts:
+      - artifacts/kernel.development.fuxi
+      - xnu-src/**/kernel.development.fuxi
