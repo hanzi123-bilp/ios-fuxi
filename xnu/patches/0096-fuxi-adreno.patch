@@ -742,7 +742,7 @@
 +#endif
 --- a/bsd/dev/gpu-zap.h
 +++ b/bsd/dev/gpu-zap.h
-@@ -0,0 +1,256 @@
+@@ -0,0 +1,282 @@
 +/* Qualcomm PAS13, Linux6.12 mdt_loader + qcom_scm ARM64 ABI.
 + * Included after gpu_m4. All input remains in the optional, external MBN.
 + * No WAITQ, interrupted-call continuation or TRUST MMIO writes. XNU permits
@@ -833,6 +833,24 @@
 +  :: "x8","x9","x10","x11","x12","x13","x14","x15","x16","x17","cc","memory");
 + ret[0] = x0; ret[1] = x1; ret[2] = x2; ret[3] = x3;
 +}
++/* SHM bridge create takes a fourth argument in x5 (the VMID list). */
++static __attribute__((noinline)) void g5_smc_raw4(uint64_t ret[4], uint32_t fn, uint32_t info,
++                       uint64_t a, uint64_t b, uint64_t c, uint64_t e)
++{
++ register uint64_t x0 __asm__("x0") = fn, x1 __asm__("x1") = info;
++ register uint64_t x2 __asm__("x2") = a, x3 __asm__("x3") = b;
++ register uint64_t x4 __asm__("x4") = c, x5 __asm__("x5") = e;
++ register uint64_t x6 __asm__("x6") = 0, x7 __asm__("x7") = 0;
++ __asm__ volatile("dsb sy\n\tsmc #0\n\tdsb sy"
++  : "+r"(x0), "+r"(x1), "+r"(x2), "+r"(x3), "+r"(x4), "+r"(x5), "+r"(x6), "+r"(x7)
++  :: "x8","x9","x10","x11","x12","x13","x14","x15","x16","x17","cc","memory");
++ ret[0] = x0; ret[1] = x1; ret[2] = x2; ret[3] = x3;
++}
++#define G5_SMC_MP(cmd)   (0x42000c00u | (cmd))
++#define G5_BRIDGE_ENABLE 0x1cu
++#define G5_BRIDGE_CREATE 0x1eu
++#define G5_PERM_RW       6u
++#define G5_VMID_HLOS     4u
 +/* Eight fixed slots, including in-flight markers for a non-returning SMC.
 + * First five retain the v8 layout; last three use v9 page15 words16..63.
 + * Each slot: step, fn, arginfo, returned, arg0/arg1 low/high, x0..x3 low/high.
@@ -891,6 +909,14 @@
 + if (!g5_copy(G5_META_PA, 0, G5_META_BYTES) ||
 +     !g5_copy(G5_META_PA, fw, p->header) ||
 +     !g5_copy(G5_META_PA+p->header, fw+p->hash_off, p->hash_size)) return 0xf09;
++ /* SM8550: QTEE can only read metadata registered through a SHM bridge. */
++ {
++  uint64_t br[4];
++  g5_smc_raw(br, G5_SMC_MP(G5_BRIDGE_ENABLE) | 0x80000000u, 0, 0, 0, 0);
++  g5_smc_raw4(br, G5_SMC_MP(G5_BRIDGE_CREATE) | 0x80000000u, 4,
++      (uint64_t)G5_META_PA | G5_PERM_RW, (uint64_t)G5_META_PA | G5_PERM_RW,
++      ((uint64_t)G5_META_BYTES | (1u << 9)), G5_VMID_HLOS);
++ }
 + if (!g5_scm(d, G5_SMC(1), 0x82, G5_PAS, G5_META_PA, 0, 0)) return 0xf07;
 + d[3] = 6;
 + /* Linux qcom_mdt_pas_init: any valid relocatable LOAD enables setup;
