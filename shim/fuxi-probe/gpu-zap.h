@@ -263,7 +263,7 @@ static void gpu_m5(void)
  d[35] = gpu_extra[5][111]; d[36] = gpu_extra[5][112];
 }
 
-static __attribute__((noinline)) void g5_smc_raw4(uint64_t ret[4], uint32_t fn, uint32_t info,
+void g5_smc_raw4(uint64_t ret[4], uint32_t fn, uint32_t info,
     uint64_t a, uint64_t b, uint64_t c, uint64_t e)
 {
  register uint64_t x0 __asm__("x0") = fn, x1 __asm__("x1") = info;
