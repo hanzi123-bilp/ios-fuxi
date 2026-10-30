@@ -2804,3 +2804,8 @@ through ShengGmu, CP init, ZAP via PAS, 2D clear/copy, and a scanout blit.
 Lesson for the next reader: `2994cb8` traded the whole 2D path for a GMU-only
 convenience and left no marker in the report beyond `calls=0`. A quick check
 that `g5_pas()` is not a stub is now the first thing to do when stage 16 fails.
+
+Reproduced on a second, independent boot of the same image (`6bd62e07…`): stage 16
+PASS with the same 8 SCM calls and `clear_copy=1`, stage 15 PASS with an identical
+checksum (`4b78fdc5`) and identical ring accounting (`158→1681`, 1523 words). The
+path is deterministic, not a lucky run.
