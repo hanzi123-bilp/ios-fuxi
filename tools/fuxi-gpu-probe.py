@@ -29,6 +29,13 @@ RBBM_BITS = {i: name for i, name in enumerate([
     'UCHE', 'SP', 'TPL1', 'VSC', 'HLSQ', 'GPU_IGN_AHB_CP', 'GPU_IGN_AHB'])}
 
 
+SHENG_STATUS = {0: 'Success', 1: 'Argument', 2: 'Firmware', 3: 'Busy', 4: 'IoError',
+                5: 'StateMismatch', 6: 'Timeout', 7: 'ClockError', 8: 'Poisoned',
+                9: 'Fault', 10: 'ProtocolError'}
+SHENG_PHASE = {0: 'not started', 1: 'preconditions', 2: 'RSCC/reset+state', 3: 'payload load',
+               4: 'register config', 5: 'FW_INIT poll', 6: 'HFI init', 7: 'HFI ready'}
+
+
 def fault_client(fsynr1, uche):
     """Linux a6xx_fault_block / a6xx_uche_fault_block, A7xx paths."""
     mid = fsynr1 & 0xff
@@ -99,11 +106,13 @@ def decode(r, pages=None):
             0x805: 'no unused disabled context/slot/ASID', 0x806: 'not a cold GMU',
             0x807: 'scratch overlaps image/FDT', 0x808: 'TLB sync timeout',
             0x809: 'SMMU readback mismatch', 0x80a: 'firmware readback mismatch',
-            0x80b: 'page-table capacity/overlap', 0x80c: 'context fault after load', 0x901: 'FW init timeout/fault',
+            0x80b: 'page-table capacity/overlap', 0x80c: 'context fault after load',
+            0x80d: 'ShengGmu cold start failed (page1[66]=status, [67]=phase)', 0x901: 'FW init timeout/fault',
             0x902: 'HFI init timeout/fault', 0x903: 'HFI ACK timeout',
             0x904: 'bad queue indices/packet size/space', 0x905: 'GMU firmware error/fault',
             0x906: 'unexpected ACK/header/sequence', 0x907: 'ACK error',
             0x908: 'missing cmd-db aux/ARC/BW resource', 0x909: 'cold precondition lost',
+            0x90b: 'stage 9 without HFI-ready from stage 8',
             0xa01: 'GPU_SET timeout/fault', 0xa02: 'GX power/clock timeout/fault',
             0xa03: 'GX GDSC off', 0xa04: 'context fault before GX',
         }
@@ -157,6 +166,18 @@ def decode(r, pages=None):
         out.append(f'  result={result(e[2])} slot={e[10]} CB={e[11]} ASID={e[12]} table_PA={(e[14]<<32)|e[13]:#x} tables={e[33]} programmed={e[15]} TLBstatus={e[16]:#x}')
         out.append(f'  fw bytes={e[17]} data_blocks={e[18]} prealloc_headers={e[19]} data_bytes={e[20]} bad_addr={e[21]:#x} bad_size={e[22]:#x}')
         out.append(f'  CBAR={e[23]:#x} CBA2R={e[24]:#x} TCR2={e[25]:#x} TCR={e[26]:#x} TTBR0={e[28]:08x}{e[27]:08x} MAIR0={e[29]:#x} SCTLR={e[30]:#x} SMR={e[31]:#x} S2CR={e[32]:#x}')
+        if e[82] == 5:
+            # Loader build only: stage 8 loaded the firmware and released CM3
+            # through the vendored UniXNU ShengGmu, not the in-tree sequence.
+            st = e[66]
+            out.append('  ShengGmu cold start (vendored UniXNU transport): '
+                       f'status={st} ({SHENG_STATUS.get(st, "unknown")}) '
+                       f'phase={e[67]} ({SHENG_PHASE.get(e[67], "?")}) ok={e[81]}')
+            out.append(f'    hash_verified={e[70]} memory_zeroed={e[71]} reset_verified={e[72]} resources_retain={e[73]}')
+            out.append(f'    FW_INIT={e[68]:#x} HFI_STATUS={e[69]:#x} fw_ready={e[79]} hfi_ready={e[80]} payloads={e[82]} arena={e[83]:#x}')
+            out.append(f'    AO_faults={e[74]:#x} CM3_faults={e[75]:#x} io writes/reads/polls={e[76]}/{e[77]}/{e[78]}')
+            if not e[81]:
+                out.append('    stopped at that phase: nothing from stage 9 onward may run')
         out.append('-- stage 9 GMU firmware + HFI startup --')
         out.append(f'  result={result(e[3])} handoff_locked={e[4]} DTCM_version={e[34]:#x} expected={e[35]:#x} init={e[36]:#x} HFIstatus={e[37]:#x} HFIversion={e[38]:#x}')
         for i, name in enumerate(['PERF_TABLE', 'BW_TABLE', 'CORE_FW_START', 'START', 'GX_BW_PERF_VOTE']):

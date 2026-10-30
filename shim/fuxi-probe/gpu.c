@@ -29,9 +29,11 @@
 #define G_RING_INDEX(w) (w)
 #endif
 #include "gpu-clock.h"
-#ifdef FUXI_XNU_LOADER
-/* Vendored UniXNU GMU transport (shim/fuxi-probe/unixnu). The probe image has
- * no room for it, so the ShengGmu path exists only in the loader build. */
+/* The loader image carries the vendored UniXNU GMU transport and cold-starts
+ * through it. FUXI_GMU_LEGACY keeps the in-tree sequence for the probe image
+ * and for tools/test-fuxi-gpu-probe.py, which has no unixnu sources. */
+#if defined(FUXI_XNU_LOADER) && !defined(FUXI_GMU_LEGACY)
+#define FUXI_GPU_SHENG_GMU 1
 #include "fuxi_gmu_adapter.h"
 #endif
 /* XNU sets this once before cold start. Loader probes retain zero. */
@@ -500,7 +502,7 @@ static int g_nc_alloc(void)
  __asm__ volatile("dsb sy" ::: "memory");
  return 1;
 }
-#ifdef FUXI_XNU_LOADER
+#ifdef FUXI_GPU_SHENG_GMU
 /* Retained for the device's lifetime: ShengGmu keeps no copy of either. */
 static ShengGmuConfig g_sheng_config;
 static ShengGmuResult g_sheng_result;
@@ -573,7 +575,7 @@ static int g_memory_load(void)
  if (!g_nc_alloc()) return 0;
  e[13] = (uint32_t)G_MEM; e[14] = G_MEM >> 32; e[33] = g_pt_next;
  /* The GMU's own context must translate before its first fetch. */
-#ifdef FUXI_XNU_LOADER
+#ifdef FUXI_GPU_SHENG_GMU
  if (!g_program_context()) return 0;
  if (!g_sheng_cold_start()) return 0;
 #else
@@ -585,7 +587,7 @@ static int g_memory_load(void)
  e[2] = 1; gpu_s8_ok = 1;
  return 1;
 }
-#ifndef FUXI_XNU_LOADER
+#ifndef FUXI_GPU_SHENG_GMU
 /* Legacy cold start used by the probe image (no ShengGmu in that build). */
 /* Linux has two queues, not three: command id0 and response id1. */
 static void g_hfi_init(void)
@@ -705,7 +707,7 @@ static int g_hfi_send(unsigned id, uint32_t *msg, unsigned words, unsigned recor
  } while (rsr("cntpct_el0") < until);
  return 0x903;
 }
-#ifndef FUXI_XNU_LOADER
+#ifndef FUXI_GPU_SHENG_GMU
 static void g_rpmh_init(void)
 {
  static const unsigned regs[] = {4,0xb,0xe,0xd,0x10,0xf,0x12,0x11,0x100,8,9,0xa,0x154,0x155,0x156,0x157,0x158};
@@ -758,7 +760,7 @@ static int g_start(void)
  if (!bw[6]) { e[3] = 0x908; return 0; }
  g_gpu_selected = g_gpu_select(g_gpu_selected);
  if (g_gpu_selected && !g_active_bw(bw)) { e[3] = 0x90a; return 0; }
-#ifdef FUXI_XNU_LOADER
+#ifdef FUXI_GPU_SHENG_GMU
  /* Stage 8 already ran the whole cold start through ShengGmu (RSCC setup,
   * firmware load + readback, CM3 release, FW_INIT and HFI ready). Repeating
   * any of those writes would break a live GMU, so only the startup votes are

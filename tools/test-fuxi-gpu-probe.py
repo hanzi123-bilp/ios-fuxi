@@ -31,6 +31,7 @@ static size_t test_zap_bytes;
 static void delay(unsigned us) { ticks += us; }
 static void mock_write(uint64_t at, uint32_t val);
 static void mock_smc(uint64_t ret[4], uint32_t fn, uint32_t info, uint64_t a, uint64_t b, uint64_t c);
+static void mock_smc4(uint64_t ret[4], uint32_t fn, uint32_t info, uint64_t a, uint64_t b, uint64_t c, uint64_t e);
 '''
 SUFFIX = r'''
 static int firmware_success = 1, ack_mode, corrupt_readback, tlb_busy;
@@ -65,6 +66,12 @@ unsigned probe_safe_wr32(uint64_t pa, uint32_t v)
  g_wr(pa, 0, v); return 0;
 }
 static uint32_t *ptr(uint64_t at) { return (uint32_t *)(uintptr_t)at; }
+static void mock_smc4(uint64_t ret[4], uint32_t fn, uint32_t info, uint64_t a, uint64_t b, uint64_t c, uint64_t e)
+{
+ (void)fn; (void)info; (void)a; (void)b; (void)c; (void)e;
+ /* SHM-bridge probe only; the PAS sequence itself goes through mock_smc. */
+ ret[0]=0; ret[1]=0x4242; ret[2]=0; ret[3]=0;
+}
 static void mock_smc(uint64_t ret[4], uint32_t fn, uint32_t info, uint64_t a, uint64_t b, uint64_t c)
 {
  scm_calls++;
@@ -445,7 +452,10 @@ int main(int argc, char **argv)
  assert((walk(G_LOG_VA)&~0xfffull)==G_LOG_PA && (walk(G_LOG_VA)&64));
  assert((walk(G_HFI_VA+0x3000)&~0xfffull)==G_HFI_PA+0x3000);
  assert((walk(G_DEBUG_VA+0x6000)&~0xfffull)==G_DEBUG_PA+0x6000);
- assert(!walk(G_DEBUG_VA+0x7000) && !walk(G_HFI_VA+0x4000));
+ /* Nothing past each payload may be mapped. The five-payload layout puts log
+  * directly after hfi, so the edge to check is each region's own end. */
+ assert(!walk(G_DUMMY_VA+G_DUMMY_SIZE) && !walk(G_LOG_VA+G_LOG_SIZE) &&
+        !walk(G_DEBUG_VA+G_DEBUG_SIZE));
  gpu_m2(9); assert(gpu_s9_ok && gpu_gmu_started && firmware_releases==1);
  assert(gpu_extra[0][40]==0x103b04 && gpu_extra[0][44]==0x20a003);
  for(unsigned i=0;i<4;i++) assert(gpu_extra[0][40+i*4]==gpu_extra[0][42+i*4] && gpu_extra[0][43+i*4]==0);
@@ -906,6 +916,18 @@ def main():
     source = source.replace('#include \"gpu-zap.h\"', (ROOT / 'shim/fuxi-probe/gpu-zap.h').read_text())
     source, raw_count = re.subn(r'static __attribute__\(\(noinline\)\) void g5_smc_raw\(.*?\n\}', 'static void g5_smc_raw(uint64_t ret[4], uint32_t fn, uint32_t info, uint64_t a, uint64_t b, uint64_t c) { mock_smc(ret, fn, info, a, b, c); }', source, flags=re.S)
     assert raw_count == 1
+    # The four-argument SMCCC wrapper (SHM-bridge probe) is non-static and also
+    # uses AArch64 register asm. Its first appearance is a block-scope forward
+    # declaration inside the zap sequence, so replace the last one - the
+    # file-scope definition - by slicing rather than by regex.
+    needle = 'void g5_smc_raw4(uint64_t ret[4], uint32_t fn, uint32_t info,'
+    start = source.rfind(needle)
+    assert start != -1
+    end = source.find('\n}', start)
+    assert end != -1 and 'register uint64_t' in source[start:end]
+    source = (source[:start] +
+              'void g5_smc_raw4(uint64_t ret[4], uint32_t fn, uint32_t info, uint64_t a, uint64_t b, uint64_t c, uint64_t e) { mock_smc4(ret, fn, info, a, b, c, e); }' +
+              source[end + 2:])
     source = source.replace('extern const uint8_t _gpu_fw_start[], _gpu_fw_end[];',
                             'extern uint8_t _gpu_fw_start[], _gpu_fw_end[];')
     source = source.replace('extern const uint8_t _sqe_fw_start[], _sqe_fw_end[];',
@@ -948,7 +970,8 @@ def main():
         cfile.write_text(PREFIX + source + SUFFIX)
         exe = tmp / 'test'
         subprocess.run(['clang', '-O1', '-g', '-Wall', '-Wextra', '-Werror',
-                        '-I' + str(ROOT / 'shim/fuxi-probe'), '-DFUXI_XNU_LOADER=1', '-DEXPECT_BLOCKS=' + ('4' if args.firmware else '1'),
+                        '-I' + str(ROOT / 'shim/fuxi-probe'), '-DFUXI_XNU_LOADER=1',
+                        '-DFUXI_GMU_LEGACY=1', '-DEXPECT_BLOCKS=' + ('4' if args.firmware else '1'),
                         '-DEXPECT_PREALLOC=' + ('11' if args.firmware else '1'),
                         '-fsanitize=undefined', '-fno-sanitize-recover=all',
                         str(cfile), str(asm), '-o', str(exe)], check=True)
