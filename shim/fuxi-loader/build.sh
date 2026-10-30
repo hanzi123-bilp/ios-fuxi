@@ -40,7 +40,10 @@ reserved = True  # Both supported windows exclude top-of-bank scratch.
 pinned = {
  "gpu": "1a2a419c39046d3141fc5fed5aa7f971de2db40cc7a1d89693c3e26fad64dd98",
  "sqe": "6d38046654333a6a5a4ee77ab67abc24e3c0c5c68237513afe98e94da8fc9fcc",
- "zap": "86e4c3f61d4ddbe581405f4cc496182cf385bee39aaefec61639a31d3619fd35",
+ # sheng-firmware tree 2c1e2729 qcom/sm8550/sheng/a740_zap.mbn, as pinned by
+ # scripts/data/adreno-inputs.json. Only this 12088-byte blob yields the
+ # 0x25ac8-byte .gpu_fw size the check below enforces.
+ "zap": "4fd56fefa82c82a677b6ce09f24368cba47ed1b110d38860196787fb85cc17b4",
 }
 lines = ['.section .gpu_fw,"a"']
 for src, name in ((gmu, 'gpu'), (sqe, 'sqe'), (zap, 'zap')):
@@ -63,16 +66,23 @@ FWPY
 printf '.section .payload,"a"\n.incbin "%s"\n' "$payload" > "$out/payload.S"
 flags=(--target=aarch64-none-elf -O2 -ffreestanding -fno-builtin -nostdlib
        -fno-pic -fno-stack-protector -mgeneral-regs-only -mstrict-align -Wall -Wextra -Werror -DFUXI=1 -DFUXI_XNU_LOADER=1 -I.. -I../fuxi-probe/unixnu)
-for source in start.S loader.c ../console.c ../fuxi-probe/probe.c; do
+# Vendored UniXNU GMU/HFI transport: probe.c includes gpu.c, which calls
+# fuxi_gmu_cold_start() from stage 8, so these must link into the same image.
+unixnu=(../fuxi-probe/unixnu/AdrenoFirmware.c ../fuxi-probe/unixnu/AdrenoHfi.c
+        ../fuxi-probe/unixnu/AdrenoHfiStartup.c ../fuxi-probe/unixnu/AdrenoHfiVotes.c
+        ../fuxi-probe/unixnu/ShengGmu.c ../fuxi-probe/unixnu/fuxi_gmu_adapter.c)
+objs=()
+for source in start.S loader.c ../console.c ../fuxi-probe/probe.c "${unixnu[@]}"; do
  name=$(basename "${source%.*}")
  "$CLANG" "${flags[@]}" -c "$source" -o "$out/$name.o"
  if [[ $source == *.c ]] && "$READELF" -r "$out/$name.o" | grep -q R_AARCH64_ABS; then
   echo "Absolute C relocation in $source" >&2; exit 1
  fi
+ objs+=("$out/$name.o")
 done
 "$CLANG" "${flags[@]}" -c "$out/payload.S" -o "$out/payload.o"
 "$CLANG" "${flags[@]}" -c "$out/gpu-fw.S" -o "$out/gpu-fw.o"
-"$LLD" -T loader.ld --build-id=none "$out/start.o" "$out/loader.o" "$out/console.o" "$out/probe.o" "$out/gpu-fw.o" "$out/payload.o" -o "$out/loader.elf"
+"$LLD" -T loader.ld --build-id=none "${objs[@]}" "$out/gpu-fw.o" "$out/payload.o" -o "$out/loader.elf"
 python3 - "$out/loader.elf" "$READELF" <<'GPUCHECK'
 import re, subprocess, sys
 sections = subprocess.check_output([sys.argv[2], '-SW', sys.argv[1]], text=True)

@@ -29,6 +29,11 @@
 #define G_RING_INDEX(w) (w)
 #endif
 #include "gpu-clock.h"
+#ifdef FUXI_XNU_LOADER
+/* Vendored UniXNU GMU transport (shim/fuxi-probe/unixnu). The probe image has
+ * no room for it, so the ShengGmu path exists only in the loader build. */
+#include "fuxi_gmu_adapter.h"
+#endif
 /* XNU sets this once before cold start. Loader probes retain zero. */
 static unsigned g_gpu_selected;
 /* ---- Fuxi-verified physical bases (research/device/probe-09/live.dtb) ---- */
@@ -192,14 +197,25 @@ static uint32_t cdb32(const uint8_t *p) { return cdb16(p) | (uint32_t)cdb16(p + 
 #define G_MEM_SIZE  0x02000000u
 #define G_IC_PA     (G_MEM + 0x100000)
 #define G_DATA_PA   (G_MEM + 0x1100000)
-#define G_DUMMY_VA  0x60000000u
-#define G_LOG_VA    0x60002000u
-#define G_HFI_VA    0x60006000u
-#define G_DEBUG_VA  0x60400000u
-#define G_LOG_PA    (G_DATA_PA + 0x2000)
-#define G_HFI_PA    (G_DATA_PA + 0x6000)
-#define G_DEBUG_PA  (G_DATA_PA + 0xa000)
+/* The five GMU payloads. icache/dummy/debug IOVAs are fixed by the firmware
+ * (a6xx_gmu_memory_alloc); log and hfi are driver-chosen and only have to stay
+ * disjoint and 4K aligned. Sizes are the ones ShengGmu validates. */
+#define G_IC_VA     0x4000u
 #define G_IC_SIZE   0xffc000u
+#define G_DUMMY_VA  0x60000000u
+#define G_DUMMY_SIZE 0x4000u
+#define G_LOG_VA    0x6000a000u
+#define G_LOG_SIZE  0x4000u
+#define G_HFI_VA    0x60006000u
+#define G_HFI_SIZE  0x4000u
+#define G_DEBUG_VA  0x60400000u
+#define G_DEBUG_SIZE 0x7000u
+/* One contiguous Normal non-cacheable physical run for dummy/log/hfi/debug. */
+#define G_DUMMY_PA  (G_DATA_PA + 0x0000)
+#define G_LOG_PA    (G_DATA_PA + 0x4000)
+#define G_HFI_PA    (G_DATA_PA + 0x8000)
+#define G_DEBUG_PA  (G_DATA_PA + 0xc000)
+#define G_DATA_SIZE 0x13000u
 #define G_PAGES     16
 #define G_STAGE_8A  0x8au
 static uint32_t gpu_extra[G_PAGES - 1][GPU_REPORT_WORDS];
@@ -458,6 +474,87 @@ static int g_program_context(void)
  if (e[31] != 0x80000005 || e[32] != g_bank) { e[2] = 0x809; return 0; }
  return 1;
 }
+/* ---- GMU payloads -------------------------------------------------------
+ * Five Normal non-cacheable segments at the IOVAs the firmware expects. The
+ * loader runs with the MMU and caches off, so the CPU view is Device-nGnRnE
+ * (never cached, always ordered); the GMU's view is set by the SMMU leaf
+ * descriptors below (MAIR index 0 = 0x44, Normal Inner/Outer non-cacheable).
+ * Both sides must see the same bytes, otherwise HFI never answers.
+ */
+typedef struct { uint64_t pa, iova; uint32_t bytes; uint32_t unpriv; } g_nc_segment;
+static const g_nc_segment g_nc_segments[5] = {
+ { G_IC_PA,    G_IC_VA,    G_IC_SIZE,    0 },  /* ShengGmuConfig.icache */
+ { G_DUMMY_PA, G_DUMMY_VA, G_DUMMY_SIZE, 0 },  /* .dummy                */
+ { G_DEBUG_PA, G_DEBUG_VA, G_DEBUG_SIZE, 0 },  /* .debug                */
+ { G_LOG_PA,   G_LOG_VA,   G_LOG_SIZE,   1 },  /* .log   (GMU reads it) */
+ { G_HFI_PA,   G_HFI_VA,   G_HFI_SIZE,   1 },  /* .hfi   (GMU reads it) */
+};
+static int g_nc_alloc(void)
+{
+ uint32_t *e = gpu_extra[0];
+ for (unsigned i = 0; i < 5; i++) {
+  g_zero(g_nc_segments[i].pa, g_nc_segments[i].bytes);
+  if (!g_map((unsigned)g_nc_segments[i].iova, g_nc_segments[i].pa,
+             g_nc_segments[i].bytes, g_nc_segments[i].unpriv)) { e[2] = 0x80b; return 0; }
+ }
+ __asm__ volatile("dsb sy" ::: "memory");
+ return 1;
+}
+#ifdef FUXI_XNU_LOADER
+/* Retained for the device's lifetime: ShengGmu keeps no copy of either. */
+static ShengGmuConfig g_sheng_config;
+static ShengGmuResult g_sheng_result;
+static int g_sheng_hfi_ready;
+/* Hand the five mapped payloads to UniXNU's ShengGmu cold start: RSCC setup,
+ * firmware hash + ICACHE/ITCM/DTCM load and readback, CM3 release, FW_INIT
+ * and HFI ready. One attempt per boot; any failure poisons the device. */
+static int g_sheng_cold_start(void)
+{
+ uint32_t *e = gpu_extra[0];
+ const ShengGmuMemory mem[5] = {
+  { (volatile uint32_t *)G_PTR(g_nc_segments[0].pa), g_nc_segments[0].bytes, g_nc_segments[0].iova },
+  { (volatile uint32_t *)G_PTR(g_nc_segments[1].pa), g_nc_segments[1].bytes, g_nc_segments[1].iova },
+  { (volatile uint32_t *)G_PTR(g_nc_segments[2].pa), g_nc_segments[2].bytes, g_nc_segments[2].iova },
+  { (volatile uint32_t *)G_PTR(g_nc_segments[3].pa), g_nc_segments[3].bytes, g_nc_segments[3].iova },
+  { (volatile uint32_t *)G_PTR(g_nc_segments[4].pa), g_nc_segments[4].bytes, g_nc_segments[4].iova },
+ };
+ g_sheng_config = (ShengGmuConfig){0};
+ g_sheng_config.chip_id = fuxi_gmu_chip_id;
+ g_sheng_config.icache  = mem[0];
+ g_sheng_config.dummy   = mem[1];
+ g_sheng_config.debug   = mem[2];
+ g_sheng_config.log     = mem[3];
+ g_sheng_config.hfi     = mem[4];
+ /* Latch before the call: ShengGmu writes CM3_SYSRESET=0 mid-sequence and the
+  * legacy 0x49 handoff refusal must hold even if the release then times out. */
+ gpu_gmu_started = 1;
+ ShengGmuStatus status = fuxi_gmu_cold_start(&g_sheng_config, &g_sheng_result);
+ e[66] = (uint32_t)status;
+ e[67] = g_sheng_result.phase;
+ e[68] = g_sheng_result.firmware_init_result;
+ e[69] = g_sheng_result.hfi_status;
+ e[70] = g_sheng_result.complete_hash_verified;
+ e[71] = g_sheng_result.memory_changed;
+ e[72] = g_sheng_result.reset_verified;
+ e[73] = g_sheng_result.resources_must_retain;
+ e[74] = g_sheng_result.ao_fault_status;
+ e[75] = g_sheng_result.cm3_fault_status;
+ e[76] = g_sheng_result.write_attempts;
+ e[77] = g_sheng_result.read_attempts;
+ e[78] = g_sheng_result.poll_reads;
+ e[79] = g_sheng_result.firmware_ready_observed;
+ e[80] = g_sheng_result.hfi_ready_observed;
+ e[81] = status == ShengGmuSuccess;
+ e[82] = 5;      /* payloads handed to ShengGmu */
+ e[83] = G_DATA_SIZE;
+ e[34] = g_sheng_result.firmware_init_result;   /* kept in the M2 report slots */
+ e[36] = g_sheng_result.firmware_init_result;
+ e[37] = g_sheng_result.hfi_status;
+ if (status != ShengGmuSuccess) { e[2] = 0x80d; return 0; }
+ g_sheng_hfi_ready = 1;
+ return 1;
+}
+#endif
 static int g_memory_load(void)
 {
  uint32_t *e = gpu_extra[0];
@@ -471,19 +568,25 @@ static int g_memory_load(void)
  if ((image < G_MEM + G_MEM_SIZE && G_MEM < end) ||
      (fdt < G_MEM + G_MEM_SIZE && G_MEM < fdt + probe_fdt_size)) { e[2] = 0x807; return 0; }
  #endif
- g_zero(G_MEM, 0x100000); g_zero(G_IC_PA, G_IC_SIZE); g_zero(G_DATA_PA, 0x11000);
+ g_zero(G_MEM, 0x100000);
  g_pt_next = 1;
- if (!g_map(0x4000, G_IC_PA, G_IC_SIZE, 0) || !g_map(G_DUMMY_VA, G_DATA_PA, 0x2000, 0) ||
-     !g_map(G_LOG_VA, G_LOG_PA, 0x4000, 1) || !g_map(G_HFI_VA, G_HFI_PA, 0x4000, 1) ||
-     !g_map(G_DEBUG_VA, G_DEBUG_PA, 0x7000, 0)) { e[2] = 0x80b; return 0; }
+ if (!g_nc_alloc()) return 0;
  e[13] = (uint32_t)G_MEM; e[14] = G_MEM >> 32; e[33] = g_pt_next;
+ /* The GMU's own context must translate before its first fetch. */
+#ifdef FUXI_XNU_LOADER
+ if (!g_program_context()) return 0;
+ if (!g_sheng_cold_start()) return 0;
+#else
  /* Linux fw_start's FAL veto + retention precede the TCM firmware writes. */
  gm_wr(0x50f1, 1); gm_wr(0x50f0, 1); g_wr(GPU_CXMISC_BASE, 0x39*4, 1);
  if (!g_program_context() || !g_firmware(1)) return 0;
+#endif
  if (g_rd(GPU_SMMU_BASE, g_cb(g_bank) + 0x58) & 0xc00001feu) { e[2] = 0x80c; return 0; }
  e[2] = 1; gpu_s8_ok = 1;
  return 1;
 }
+#ifndef FUXI_XNU_LOADER
+/* Legacy cold start used by the probe image (no ShengGmu in that build). */
 /* Linux has two queues, not three: command id0 and response id1. */
 static void g_hfi_init(void)
 {
@@ -497,6 +600,7 @@ static void g_hfi_init(void)
   g_wr(G_HFI_PA, h+24, 1); g_wr(G_HFI_PA, h+28, 1); g_wr(G_HFI_PA, h+32, 1);
  }
 }
+#endif
 /* Return cmd-db aux data only after checking both the header and data extents. */
 static const uint8_t *g_aux(const char *name, unsigned *count)
 {
@@ -601,6 +705,7 @@ static int g_hfi_send(unsigned id, uint32_t *msg, unsigned words, unsigned recor
  } while (rsr("cntpct_el0") < until);
  return 0x903;
 }
+#ifndef FUXI_XNU_LOADER
 static void g_rpmh_init(void)
 {
  static const unsigned regs[] = {4,0xb,0xe,0xd,0x10,0xf,0x12,0x11,0x100,8,9,0xa,0x154,0x155,0x156,0x157,0x158};
@@ -610,6 +715,7 @@ static void g_rpmh_init(void)
  /* A7xx PDC uCode is AOP-owned: only enable/configure, never replace it. */
  g_wr(0x0b280000, 0x1148*4, 0); g_wr(0x0b280000, 0x1140*4, 0x80000001);
 }
+#endif
 static int g_poll(unsigned reg, uint32_t mask, uint32_t value, unsigned word)
 {
  uint32_t *e = gpu_extra[0];
@@ -652,6 +758,14 @@ static int g_start(void)
  if (!bw[6]) { e[3] = 0x908; return 0; }
  g_gpu_selected = g_gpu_select(g_gpu_selected);
  if (g_gpu_selected && !g_active_bw(bw)) { e[3] = 0x90a; return 0; }
+#ifdef FUXI_XNU_LOADER
+ /* Stage 8 already ran the whole cold start through ShengGmu (RSCC setup,
+  * firmware load + readback, CM3 release, FW_INIT and HFI ready). Repeating
+  * any of those writes would break a live GMU, so only the startup votes are
+  * published here. 0x90b = stage 8 never reached HFI-ready. */
+ if (!g_sheng_hfi_ready) { e[3] = 0x90b; return 0; }
+ e[38] = gm_rd(0x5181);
+#else
  if (gm_rd(0x5000) != 1 || g_rd(GPU_RSCC_BASE, 0x101*4) || (gm_rd(0x5180)&1)) { e[3] = 0x909; return 0; }
  g_hfi_init(); g_rpmh_init();
  gm_wr(0x9304, 0xffffffff); gm_wr(0x9306, 0xffffffff);
@@ -672,6 +786,7 @@ static int g_start(void)
  gm_wr(0x5186, 1);
  if (!g_poll(0x5180, 1, 1, 37)) { e[3] = 0x902; return 0; }
  e[38] = gm_rd(0x5181);
+#endif
  int err = g_hfi_send(4, perf, 59, 0);
  if (!err) err = g_hfi_send(3, bw, 160, 1);
  uint32_t core[2] = {0}, start[1] = {0};
