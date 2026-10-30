@@ -63,11 +63,7 @@ FWPY
 printf '.section .payload,"a"\n.incbin "%s"\n' "$payload" > "$out/payload.S"
 flags=(--target=aarch64-none-elf -O2 -ffreestanding -fno-builtin -nostdlib
        -fno-pic -fno-stack-protector -mgeneral-regs-only -mstrict-align -Wall -Wextra -Werror -DFUXI=1 -DFUXI_XNU_LOADER=1 -I.. -I../fuxi-probe/unixnu)
-# ShengGmu.c and the adapter need the generated ShengGmuSource.h; build the
- * self-contained HFI/firmware half for now. */
-for source in start.S loader.c ../console.c ../fuxi-probe/probe.c \
-    ../fuxi-probe/unixnu/AdrenoHfi.c ../fuxi-probe/unixnu/AdrenoHfiStartup.c \
-    ../fuxi-probe/unixnu/AdrenoHfiVotes.c ../fuxi-probe/unixnu/AdrenoFirmware.c; do
+for source in start.S loader.c ../console.c ../fuxi-probe/probe.c; do
  name=$(basename "${source%.*}")
  "$CLANG" "${flags[@]}" -c "$source" -o "$out/$name.o"
  if [[ $source == *.c ]] && "$READELF" -r "$out/$name.o" | grep -q R_AARCH64_ABS; then
