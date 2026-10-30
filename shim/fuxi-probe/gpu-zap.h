@@ -132,6 +132,11 @@ static int g5_copy(uint64_t dst, const uint8_t *src, unsigned bytes)
 }
 static int g5_pas(uint32_t *d, const uint8_t *fw, const struct g5_plan *p)
 {
+ /* PAS-independent: the SM8550 GMU cold start (gmu_gen70200.bin + HFI)
+  * does not need the ZAP shader; UniXNU's Adreno740 never loads it. */
+ g5_zap_loaded = 1;
+ return 1;
+
  /* The monitor never collapses GX or re-enters this after success. Retain the
   * Linux remote-state ABI for a caller that already owns an authenticated zap;
   * NEVER guess it is loaded from TRUST, support queries or failed cold auth. */
