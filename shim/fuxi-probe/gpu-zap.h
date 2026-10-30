@@ -1,5 +1,5 @@
 unsigned g5_bridge_state;
-unsigned g5_bridge_en, g5_bridge_cr;
+unsigned g5_bridge_en, g5_bridge_cr, g5_v1, g5_v2, g5_v3;
 /* Qualcomm PAS13, Linux6.12 mdt_loader + qcom_scm ARM64 ABI.
  * Included after gpu_m4. All input remains in the optional, external MBN.
  * No WAITQ, interrupted-call continuation or TRUST MMIO writes. XNU permits
@@ -158,6 +158,13 @@ void g5_smc_raw4(uint64_t ret[4], uint32_t fn, uint32_t info,
    * buffer, which is not what the bridge interface takes. */
   g5_smc_raw4(br, (0x42000c00u | 0x1eu) | 0x80000000u, 0,
       0x9ff600000ULL, 0x2000ULL, 6u, 4u);
+  g5_v1 = (unsigned)(br[0] & 0xffffu) | ((unsigned)(br[1] & 0xffffu) << 16);
+  g5_smc_raw4(br, (0x42000c00u | 0x1eu) | 0x80000000u, 0,
+      0x9ff600000ULL | 6u, 0x2000ULL | (1u << 9), 6u, 4u);
+  g5_v2 = (unsigned)(br[0] & 0xffffu) | ((unsigned)(br[1] & 0xffffu) << 16);
+  g5_smc_raw4(br, (0x42000c00u | 0x1eu) | 0x80000000u, 0,
+      0x9ff600000ULL, 0x2000ULL, 6u, 0u);
+  g5_v3 = (unsigned)(br[0] & 0xffffu) | ((unsigned)(br[1] & 0xffffu) << 16);
   g5_bridge_state = g5_bridge_cr = (unsigned)(br[0] & 0xffffu) | ((unsigned)(br[1] & 0xffffu) << 16); }
 if (!g5_scm(d, G5_SMC(1), 0x82, G5_PAS, G5_META_PA, 0, 0)) return 0xf07;
  d[3] = 6;
