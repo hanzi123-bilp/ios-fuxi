@@ -194,6 +194,20 @@ if (!g5_scm(d, G5_SMC(1), 0x82, G5_PAS, G5_META_PA, 0, 0)) return 0xf07;
  g5_zap_loaded = d[4] = 1;
  return 1;
 }
+/* Fault latch. gpu_m5 re-reads CP/RBBM/FSR after the fact and can see zeros,
+ * so capture the four sources of g3_faulted() at the failing moment instead.
+ * Lives in gpu_extra[14] words 64..71: page 0x10F, untouched by the SCM slots
+ * (16..63) and by gpu_m5's magic words (0..1). */
+static void g5_latch_fault(unsigned iteration)
+{
+ uint32_t *l = gpu_extra[14] + 64;
+ l[0] = 0x5ac3f00du; l[1] = iteration;
+ l[2] = g3_gr(0x823); l[3] = g3_gr(0x201);
+ l[4] = g3_sr(g_cb(g3_bank) + 0x58);
+ l[5] = g3_sr(g_cb(g_bank) + 0x58);
+ l[6] = g3_sr(SMMU_GFSR);
+ l[7] = gpu_extra[5][116];
+}
 static int g5_run(uint32_t *d)
 {
 #if defined(FUXI_GPU_XNU)
@@ -230,7 +244,7 @@ static int g5_run(uint32_t *d)
  /* Linux hw_init: ONLY SET_SECURE_MODE(0), a6xx_flush (mb + doorbell),
   * a6xx_idle. Flush here means ring publication, not a guessed cache event. */
  if (gpu_extra[5][116]) return 0xf0b;
- if (g3_faulted()) return gpu_extra[5][116] ? 0xf0b : 0xf0c;
+ if (g3_faulted()) { g5_latch_fault(0); return gpu_extra[5][116] ? 0xf0b : 0xf0c; }
  d[28] = g3_gr(0x806); d[29] = g3_gr(0x807); d[31] = g3_gr(0x210);
  if (gpu_extra[5][116]) return 0xf0b;
  if (g3_wptr+2 >= 0x8000/4 || d[28] != g3_wptr ||
@@ -244,7 +258,7 @@ static int g5_run(uint32_t *d)
  for (unsigned i = 0; i < 5000; i++) {
   d[30] = i+1; d[28] = g3_gr(0x806); d[29] = g3_gr(0x807); d[31] = g3_gr(0x210);
   if (gpu_extra[5][116]) return 0xf0b;
-  if (!(i & 15) && g3_faulted()) return gpu_extra[5][116] ? 0xf0b : 0xf0c;
+  if (!(i & 15) && g3_faulted()) { g5_latch_fault(i + 1); return gpu_extra[5][116] ? 0xf0b : 0xf0c; }
   if (d[28] == g3_wptr && d[29] == g3_wptr && !(d[31] & ~1u)) break;
   if (i == 4999) return 0xf0d;
   delay(10);
@@ -253,7 +267,7 @@ static int g5_run(uint32_t *d)
  d[20] = g3_gr(0xf400); d[23] = g3_gr(0xfc00); d[24] = g3_gr(0xfc01);
  d[32] = g3_gr(0x823); d[46] = g3_gr(0x821); d[47] = g3_gr(0x201);
  if (gpu_extra[5][116]) return 0xf0b;
- if (g3_faulted()) return gpu_extra[5][116] ? 0xf0b : 0xf0c;
+ if (g3_faulted()) { g5_latch_fault(0xffffu); return gpu_extra[5][116] ? 0xf0b : 0xf0c; }
  if (d[20]) return 0xf0e;
  if (g3_read(G3_FENCE_PA+4) != G3_GUARD || g3_read(G3_FENCE_PA+0xffc) != G3_GUARD) return 0xf01;
  if (gpu_extra[5][116]) return 0xf0b;

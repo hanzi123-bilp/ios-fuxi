@@ -303,6 +303,12 @@ def decode(r, pages=None):
         out.append(f'  TRUST before/after={d[19]:#x}/{d[20]:#x} TSB before/after={d[22]:08x}{d[21]:08x}/{d[24]:08x}{d[23]:08x} (after valid at step>=11)')
         out.append(f'  secure packet={d[39]:08x} {d[40]:08x} submitted={d[43]} ring before={d[25]}/{d[26]} target={d[27]} after={d[28]}/{d[29]} polls={d[30]} RBBM={d[31]:#x} CP_INT={d[32]:#x} HW_FAULT={d[46]:#x} PROTECT={d[45]:#x} RBBM_INT={d[47]:#x}')
         out.append(f'  guards={d[41]:08x}/{d[42]:08x} safe_faults={d[33]} last_PA={d[35]:08x}{d[34]:08x} ESR={d[36]:#x}')
+        if len(pages) >= 15:
+            latch = pages[14][64:72]
+            if latch[0] == 0x5AC3F00D:
+                out.append(f'  fault latch at failure: iteration={latch[1]} CP_HW_FAULT={latch[2]:#x} '
+                           f'RBBM_INT={latch[3]:#x} GMU_FSR={latch[4]:#x} GPU_FSR={latch[5]:#x} '
+                           f'GFSR={latch[6]:#x} safe_faults={latch[7]}')
         slots = [d[48+i*16:64+i*16] for i in range(5)]
         v9 = pages[0][0] == 0xa7400009
         if v9 and len(pages) >= 15 and pages[14][:2] == [0xa7400009, 16]:

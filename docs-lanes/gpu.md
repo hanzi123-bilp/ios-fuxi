@@ -2701,3 +2701,29 @@ CB FSRs and GFSR *inside* the failing loop iteration instead of after it.
 
 `shim/fuxi-loader/build.sh` now accepts `FUXI_EXTRA_FLAGS` (the macro switch
 above is one use), so such A/B builds do not need a source edit.
+
+### Fault latch, same failure (2026-10-30)
+
+`g5_run()` now latches the four sources of `g3_faulted()` at the failing
+iteration itself into page `0x10F` words 64..71 (`0x5ac3f00d` magic), because
+`gpu_m5()`'s post-mortem re-reads can see zeros. Image `59913d66…`, fresh boot,
+stages 1–13 PASS, stage 16 still `0xf0c`:
+
+```
+fault latch at failure: iteration=1 CP_HW_FAULT=0x0 RBBM_INT=0x0
+                        GMU_FSR=0x400 GPU_FSR=0x400 GFSR=0x0 safe_faults=0
+```
+
+The latch is taken from inside the `if (g3_faulted())` that returns `0xf0c`, yet
+every input it re-reads is zero (and `0x400` is the reserved bit the mask
+excludes). `polls=1` puts the bail at iteration 0 of the secure-packet wait, and
+`safe_faults=0` says no MMIO access aborted. So the predicate and its own inputs
+disagree. The strongest remaining explanation is a *transient* read during the
+secure-mode transition: `probe_safe_rd32()` returns `0xdeadfa17` on a synchronous
+abort, and that value passes both `G3_CP_ERRORS` and `G3_RBBM_ERRORS`, which
+would make `g3_faulted()` true while every later read is clean.
+
+Next instrument, if this is ever worth another cycle: latch from *inside*
+`g3_faulted()` (the value it computed, each term, and the `safe_faults` before
+and after its own reads), and if that confirms the transient, require two
+consecutive faulted checks with a delay before the stage gives up.
