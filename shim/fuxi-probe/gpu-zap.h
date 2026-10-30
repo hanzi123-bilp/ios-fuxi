@@ -1,3 +1,4 @@
+unsigned g5_bridge_state;
 /* Qualcomm PAS13, Linux6.12 mdt_loader + qcom_scm ARM64 ABI.
  * Included after gpu_m4. All input remains in the optional, external MBN.
  * No WAITQ, interrupted-call continuation or TRUST MMIO writes. XNU permits
@@ -153,7 +154,8 @@ void g5_smc_raw4(uint64_t ret[4], uint32_t fn, uint32_t info,
   g5_smc_raw(br, (0x42000c00u | 0x1cu) | 0x80000000u, 0, 0, 0, 0);
   g5_smc_raw4(br, (0x42000c00u | 0x1eu) | 0x80000000u, 4,
       0x9ff600000ULL | 6u, 0x9ff600000ULL | 6u,
-      (0x2000ULL | (1u << 9)), 4u); }
+      (0x2000ULL | (1u << 9)), 4u);
+  g5_bridge_state = (unsigned)(br[0] & 0xffffu) | ((unsigned)(br[1] & 0xffffu) << 16); }
 if (!g5_scm(d, G5_SMC(1), 0x82, G5_PAS, G5_META_PA, 0, 0)) return 0xf07;
  d[3] = 6;
  /* Linux qcom_mdt_pas_init: any valid relocatable LOAD enables setup;
