@@ -2636,3 +2636,40 @@ this when word 82 is 5.
 Open: the RSCC base assumption is the one board fact with no measurement behind
 it. A cold start that stops at phase 2 (`StateMismatch`/`IoError`) points there
 first; phase 5 with `Timeout` points at the 10 ms poll bound inside ShengGmu.
+
+## Device results, GMU cold start through ShengGmu (2026-10-30)
+
+Image `45bdec59…` (`shim/out/fuxi-loader/fuxi-xnu-boot.img`), one boot, sequential
+requests 8 → 9 → 10 → 13 against the live probe, usbipd into WSL.
+
+| stage | result | numbers |
+| --- | --- | --- |
+| 8 | PASS | SMMU CB1/ASID1/SID5, 13 tables at `0x9fe000000`; firmware 66844 B, 4 data + 11 prealloc blocks, 66604 B of icache; **ShengGmu status 0 (Success), phase 7 (HFI ready)**, `hash_verified=1`, `FW_INIT=0x100`, `HFI_STATUS=0x1`, IO 174 writes / 252 reads / 32 polls |
+| 9 | PASS | PERF, BW, CORE_FW_START and START all ACKed with matching return headers; `HFIversion=0x20050000` |
+| 10 | PASS | `GPU_SET` ACK `0x80000000`, GX GDSCR `0xf8222800`, `RBBM_STATUS=0x1`, GX_BW_PERF_VOTE ACKed |
+| 11 | PASS | GPU CB2/ASID2 vs GMU CB1/ASID1, SID0/1 SMR+S2CR, 3 page tables at `0x9ff200000` |
+| 12 | PASS | SQE 75380 B file / 75376 B copied, 18844 dwords read back, rptr 0→7, 2 polls |
+| 13 | PASS | fence `0xa740f00d`, rptr 7→11, 1 poll |
+
+What this settles:
+
+* the `REG_*` dword numbering is the A6XX whole-GPU one (`CM3_SYSRESET` at
+  `0x1f800`); a block-relative value would not have reached the GMU at all;
+* the five payload extents and IOVAs are right - the firmware executed from
+  icache and the HFI rings worked;
+* `AdrenoHfiInitializeStopped`'s queue table (168/6/12/3/3) is compatible with
+  `g_hfi_send`'s raw word offsets, which was the largest open risk in mixing the
+  vendored transport with the in-tree probe;
+* the corrected fatal masks (`0x29` / `0x800000`) produce no false fault:
+  `AO_faults=0`, `CM3_faults=0`;
+* the rebased RSCC byte numbering did not disturb the boot: phase 1 read
+  `SEQ_BUSY_DRV0` (byte `0x404`) as idle and the 17 writes stayed inside the
+  `0x10000` window.
+
+Not settled by this run: RSC/PDC behaviour itself. A GMU cold start does not
+depend on it, so the run only shows the writes are harmless, not that they
+land on the right registers. Sleep/wake (power collapse) is the operation that
+would prove or disprove `byte = 4*(D - 0x8c00)`.
+
+Unchanged: the reserved SMMUv2 FSR bit 10 (`0x400`) still reads on both the GMU
+and GPU context banks from programming time, as in every earlier milestone.
