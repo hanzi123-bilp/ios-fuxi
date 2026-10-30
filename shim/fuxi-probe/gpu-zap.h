@@ -132,11 +132,9 @@ static int g5_copy(uint64_t dst, const uint8_t *src, unsigned bytes)
 }
 static int g5_pas(uint32_t *d, const uint8_t *fw, const struct g5_plan *p)
 {
- /* PAS-independent: the SM8550 GMU cold start (gmu_gen70200.bin + HFI)
-  * does not need the ZAP shader; UniXNU's Adreno740 never loads it. */
- g5_zap_loaded = 1;
- return 1;
-
+ /* The GMU cold start does not need the ZAP, but the 2D engine does: with
+  * TRUST still 1 every surface write is silently dropped. 2994cb8 stubbed
+  * this function out and that is exactly why stage 16 could never pass. */
  /* The monitor never collapses GX or re-enters this after success. Retain the
   * Linux remote-state ABI for a caller that already owns an authenticated zap;
   * NEVER guess it is loaded from TRUST, support queries or failed cold auth. */
@@ -258,7 +256,7 @@ static int g5_run(uint32_t *d)
  for (unsigned i = 0; i < 5000; i++) {
   d[30] = i+1; d[28] = g3_gr(0x806); d[29] = g3_gr(0x807); d[31] = g3_gr(0x210);
   if (gpu_extra[5][116]) return 0xf0b;
-  if (!(i & 15) && g3_faulted()) { g5_latch_fault(i + 1); return gpu_extra[5][116] ? 0xf0b : 0xf0c; }
+  if (!(i & 15) && g3_faulted_mask(G3_CP_ERRORS_AFTER_SECURE)) { g5_latch_fault(i + 1); return gpu_extra[5][116] ? 0xf0b : 0xf0c; }
   if (d[28] == g3_wptr && d[29] == g3_wptr && !(d[31] & ~1u)) break;
   if (i == 4999) return 0xf0d;
   delay(10);
@@ -267,7 +265,7 @@ static int g5_run(uint32_t *d)
  d[20] = g3_gr(0xf400); d[23] = g3_gr(0xfc00); d[24] = g3_gr(0xfc01);
  d[32] = g3_gr(0x823); d[46] = g3_gr(0x821); d[47] = g3_gr(0x201);
  if (gpu_extra[5][116]) return 0xf0b;
- if (g3_faulted()) { g5_latch_fault(0xffffu); return gpu_extra[5][116] ? 0xf0b : 0xf0c; }
+ if (g3_faulted_mask(G3_CP_ERRORS_AFTER_SECURE)) { g5_latch_fault(0xffffu); return gpu_extra[5][116] ? 0xf0b : 0xf0c; }
  if (d[20]) return 0xf0e;
  if (g3_read(G3_FENCE_PA+4) != G3_GUARD || g3_read(G3_FENCE_PA+0xffc) != G3_GUARD) return 0xf01;
  if (gpu_extra[5][116]) return 0xf0b;

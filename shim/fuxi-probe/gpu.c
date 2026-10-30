@@ -1184,7 +1184,12 @@ static void g3_diagnostics(unsigned stage)
 }
 /* No interrupt delivery is enabled: inspect raw status, both FSRs and ring.
  * Reserved FSR bit10 was observed on GMU CB1 in m2; retain but don't gate on it. */
-static int g3_faulted(void)
+/* CP_SET_SECURE_MODE(0) makes the CP drop and reload its microcode, and that
+ * transition itself raises BR_UCODE (bit 1) and BV_UCODE (bit 14) in
+ * CP_INTERRUPT_STATUS. Those two bits are part of the transition, not evidence
+ * that the command failed; everything else still counts. */
+#define G3_CP_ERRORS_AFTER_SECURE (G3_CP_ERRORS & ~0x4002u)
+static int g3_faulted_mask(uint32_t cp_mask)
 {
  /* Read through the fault-contained accessor directly: an aborted read
   * returns the synthetic 0xdeadfa17, which passes both *_ERRORS masks and
@@ -1198,7 +1203,7 @@ static int g3_faulted(void)
  uint32_t gf = probe_safe_rd32(GPU_SMMU_BASE + SMMU_GFSR, &f[4]);
  uint32_t safe = gpu_extra[5][116];
  int bad = safe ||
-  (!f[0] && (cp & G3_CP_ERRORS)) || (!f[1] && (irq & G3_RBBM_ERRORS)) ||
+  (!f[0] && (cp & cp_mask)) || (!f[1] && (irq & G3_RBBM_ERRORS)) ||
   (!(f[2] | f[3]) && (fsr & G3_FSR_MASK)) || (!f[4] && gf);
  if (bad) {
   /* First decision only: this is what the predicate actually saw. */
@@ -1211,6 +1216,7 @@ static int g3_faulted(void)
  }
  return bad;
 }
+static int g3_faulted(void) { return g3_faulted_mask(G3_CP_ERRORS); }
 static int g3_wait(unsigned fence)
 {
  uint32_t *e = gpu_extra[5]; unsigned off = fence ? 55 : 48;

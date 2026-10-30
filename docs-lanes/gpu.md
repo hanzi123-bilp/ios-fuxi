@@ -2776,3 +2776,31 @@ is a separate piece of archaeology rather than a continuation of the GMU port.
 
 `g3_faulted()` keeps the abort-aware reads and the decision latch; that build
 (`a9917661…`) passes stages 1–13 on the device.
+
+## Correction: stage 16–15 PASS, the PAS path had been stubbed (2026-10-30)
+
+The two entries above about a "real CP ucode fault" and the SQE/firmware
+comparison are **wrong**, and this supersedes them. Commit `2994cb8`
+("gpu-zap: make the PAS path a no-op (ZAP is not needed for GMU start)")
+inserted a `g5_zap_loaded = 1; return 1;` at the top of `g5_pas()`. That is
+true for the GMU cold start, which does not need the ZAP, but false for
+everything 2D: with no `PAS auth_and_reset` the GPU stays in secure mode, and
+the A740 2D engine then drops every surface write silently. Every symptom I
+chased - the `0xf0c` bail, `CP_INTERRUPT_STATUS` bit 1/14, `calls=0`,
+`path=0`, the firmware-set difference - is downstream of those four lines.
+
+With the real path restored, one boot, requests 16 then 15:
+
+| stage | result | numbers |
+| --- | --- | --- |
+| 16 | **PASS** | `authenticated=1`, `path=1` (cold), 8 SCM calls all returning 0, `TRUST 1→0`, secure packet drained in 4 polls with `CP_INT=0`, `clear_copy=1` |
+| 14 | **PASS** | 256×256 clear + copy, checksum `fbf00dc5` both sides, fence `a740b014`, GPU 76.7 µs vs 54.2 ms uncached CPU byte copy |
+| 15 | **PASS** | 256×64 blit into the live scanout at `0xb8000000` (pitch 4320, dst 64,256), checksum `4b78fdc5`, fence `a740b015`, GPU 211.6 µs |
+
+Stages 1–13 passed in the same run. The GPU therefore goes from reset to
+rendering into the panel framebuffer entirely from the loader: GMU firmware
+through ShengGmu, CP init, ZAP via PAS, 2D clear/copy, and a scanout blit.
+
+Lesson for the next reader: `2994cb8` traded the whole 2D path for a GMU-only
+convenience and left no marker in the report beyond `calls=0`. A quick check
+that `g5_pas()` is not a stub is now the first thing to do when stage 16 fails.
