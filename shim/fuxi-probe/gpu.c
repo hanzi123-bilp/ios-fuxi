@@ -1186,10 +1186,30 @@ static void g3_diagnostics(unsigned stage)
  * Reserved FSR bit10 was observed on GMU CB1 in m2; retain but don't gate on it. */
 static int g3_faulted(void)
 {
- uint32_t cp = g3_gr(0x823), irq = g3_gr(0x201);
- uint32_t fsr = g3_sr(g_cb(g3_bank)+0x58) | g3_sr(g_cb(g_bank)+0x58);
- uint32_t gf = g3_sr(SMMU_GFSR);
- return gpu_extra[5][116] || (cp & G3_CP_ERRORS) || (irq & G3_RBBM_ERRORS) || (fsr & G3_FSR_MASK) || gf;
+ /* Read through the fault-contained accessor directly: an aborted read
+  * returns the synthetic 0xdeadfa17, which passes both *_ERRORS masks and
+  * would report a hardware fault that never happened. A value only counts
+  * when its read completed. */
+ uint32_t f[5] = {0, 0, 0, 0, 0};
+ uint32_t cp = probe_safe_rd32(GPU_REG_BASE + 0x823*4, &f[0]);
+ uint32_t irq = probe_safe_rd32(GPU_REG_BASE + 0x201*4, &f[1]);
+ uint32_t fsr = probe_safe_rd32(GPU_SMMU_BASE + g_cb(g3_bank) + 0x58, &f[2]) |
+                probe_safe_rd32(GPU_SMMU_BASE + g_cb(g_bank) + 0x58, &f[3]);
+ uint32_t gf = probe_safe_rd32(GPU_SMMU_BASE + SMMU_GFSR, &f[4]);
+ uint32_t safe = gpu_extra[5][116];
+ int bad = safe ||
+  (!f[0] && (cp & G3_CP_ERRORS)) || (!f[1] && (irq & G3_RBBM_ERRORS)) ||
+  (!(f[2] | f[3]) && (fsr & G3_FSR_MASK)) || (!f[4] && gf);
+ if (bad) {
+  /* First decision only: this is what the predicate actually saw. */
+  uint32_t *l = gpu_extra[14] + 72;
+  if (l[0] != 0x5ac3f00eu) {
+   l[0] = 0x5ac3f00eu; l[1] = cp; l[2] = irq; l[3] = fsr; l[4] = gf; l[5] = safe;
+   l[6] = f[0] | f[1] << 1 | f[2] << 2 | f[3] << 3 | f[4] << 4;
+   l[7] = gpu_extra[5][117];
+  }
+ }
+ return bad;
 }
 static int g3_wait(unsigned fence)
 {

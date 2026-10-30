@@ -2727,3 +2727,52 @@ Next instrument, if this is ever worth another cycle: latch from *inside*
 `g3_faulted()` (the value it computed, each term, and the `safe_faults` before
 and after its own reads), and if that confirms the transient, require two
 consecutive faulted checks with a delay before the stage gives up.
+
+### The stage-16 CP fault is real, and the firmware set differs (2026-10-30)
+
+Two corrections to the entry above.
+
+**The bail is not a false positive.** `g3_faulted()` now reads through the
+fault-contained accessor and only counts a value whose read completed (an
+aborted read returns `0xdeadfa17`, which passes both error masks), and it
+latches what it actually saw. Image `a9917661…`, stage 16 still `0xf0c`:
+
+```
+g3_faulted decision: cp=0x4002 irq=0x0 fsr=0x400 gf=0x0 safe=0
+                     aborted_reads=none first_fault_PA=0x0
+```
+
+`cp` is `CP_INTERRUPT_STATUS` (`0x823`) and `0x4002` is bit 1 (BR_UCODE) plus
+bit 14 (BV_UCODE): the BR/BV microcode reported an error while executing the
+`CP_SET_SECURE_MODE(0)` packet. No read aborted, the SMMU FSRs only carry the
+reserved bit 10, and the post-mortem reads it as 0 because the register is
+cleared after the fact. So the stage genuinely fails on the GPU side, and the
+earlier "transient abort" explanation was wrong.
+
+**The image that last passed stage 16 embedded a different firmware set.** Both
+images carry a `0x25ac8` `.gpu_fw`, but the blobs inside differ:
+
+| blob | `fuxi-xnu-final.img.prev` (older image) | this build |
+| --- | --- | --- |
+| GMU | `f26ca265…` | `1a2a419c…` (pinned) |
+| SQE | `662bb2aa…` | `6d380466…` (pinned) |
+| ZAP | `885734f0…` (`a740_zap_full.mbn`) | `4fd56fef…` (pinned) |
+
+The historic `m5b` PASS therefore predates the pinning: it ran a completely
+different GMU, SQE and ZAP. Since `BR_UCODE`/`BV_UCODE` are microcode errors,
+the SQE is the prime suspect, and swapping only the SQE (keeping the pinned GMU
+and ZAP) is the experiment that separates them.
+
+The old image also hangs before USB enumeration when booted on this device now,
+so it cannot be used directly as the control.
+
+The SQE swap was tried and rejected. Building with only the older image's
+SQE (`662bb2aa…`, extracted from `.prev`) and keeping the pinned GMU and ZAP
+makes stage 12 fail outright with `0xc07` (CP init rptr/idle timeout,
+`SQE_STARTED=1`, rptr never advances), so the old SQE is not a drop-in fix and
+the historic pass cannot be rebuilt by exchanging blobs. Reconstructing it
+would need the m5b-era probe source and its unpinned firmware together, which
+is a separate piece of archaeology rather than a continuation of the GMU port.
+
+`g3_faulted()` keeps the abort-aware reads and the decision latch; that build
+(`a9917661…`) passes stages 1–13 on the device.

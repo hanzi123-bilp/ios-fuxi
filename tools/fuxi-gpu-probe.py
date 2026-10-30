@@ -309,6 +309,13 @@ def decode(r, pages=None):
                 out.append(f'  fault latch at failure: iteration={latch[1]} CP_HW_FAULT={latch[2]:#x} '
                            f'RBBM_INT={latch[3]:#x} GMU_FSR={latch[4]:#x} GPU_FSR={latch[5]:#x} '
                            f'GFSR={latch[6]:#x} safe_faults={latch[7]}')
+            dec = pages[14][72:80]
+            if dec[0] == 0x5AC3F00E:
+                aborted = [name for bit, name in enumerate(('CP', 'RBBM', 'GMU_FSR', 'GPU_FSR', 'GFSR'))
+                           if dec[6] & (1 << bit)]
+                out.append(f'  g3_faulted decision: cp={dec[1]:#x} irq={dec[2]:#x} fsr={dec[3]:#x} '
+                           f'gf={dec[4]:#x} safe={dec[5]} aborted_reads={aborted or "none"} '
+                           f'first_fault_PA={dec[7]:#x}')
         slots = [d[48+i*16:64+i*16] for i in range(5)]
         v9 = pages[0][0] == 0xa7400009
         if v9 and len(pages) >= 15 and pages[14][:2] == [0xa7400009, 16]:
