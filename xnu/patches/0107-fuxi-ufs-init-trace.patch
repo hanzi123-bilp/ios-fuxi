@@ -1,0 +1,61 @@
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -810,11 +810,17 @@
+ static int
+ sweet_ufs_init(void)
+ {
++#if defined(FUXI)
++	printf("FUXI UFS: step0 init enter\n");
++#endif
+ 	if (su.poisoned) return EIO;
+ #if defined(FUXI)
+     uint32_t requested=0;
+     if (!PE_parse_boot_argn("fuxi_ufs_probe", &requested, sizeof(requested)) || requested!=1)
+         return ENXIO;
++#if defined(FUXI)
++	printf("FUXI UFS: step1 probe gate passed (requested=%u)\n", requested);
++#endif
+     vm_offset_t gcc=ml_io_map(0x177000,0x1000);
+     if (!gcc) return ENOMEM;
+     volatile uint32_t *ahb=(volatile uint32_t *)(gcc+0x24);
+@@ -829,6 +835,9 @@
+     clock_interval_to_deadline(1,NSEC_PER_MSEC,&deadline);
+     while ((*ahb&0x80000000) && mach_absolute_time()<deadline) __asm__ volatile("yield");
+     if (*ahb&0x80000000) { *ahb=old; return ETIMEDOUT; }
++#if defined(FUXI)
++	printf("FUXI UFS: step2 gcc ok (ahb=%08x now=%08x)\n", old, *ahb);
++#endif
+ #endif
+ 	DTEntry node;
+ 	uintptr_t const *reg = NULL;
+@@ -848,6 +857,10 @@
+ 		printf("SWEET UFS: no /sweet-ufs node in the device tree\n");
+ 		return ENXIO;
+ 	}
++#if defined(FUXI)
++	printf("FUXI UFS: step3 dt node %s ok reg=%#llx size=%u\n", ufs_node,
++	    (unsigned long long)reg[0], (unsigned)size);
++#endif
+ 	PE_parse_boot_argn("ufsroot", want, sizeof(want));
+ 	uint32_t rw = 0;
+ 	PE_parse_boot_argn("ufsrw", &rw, sizeof(rw));
+@@ -880,6 +893,9 @@
+ 	su.dma_pa = ptoa_64(pn);
+ 	su.lun = 0;
+ 	su.secsize = DEV_BSIZE;
++#if defined(FUXI)
++	printf("FUXI UFS: step4 regs+dma mapped (dma=%#llx)\n", (unsigned long long)su.dma_pa);
++#endif
+ 
+ 	lck_mtx_lock(&sweet_ufs_lock);
+ #if defined(FUXI)
+@@ -888,6 +904,9 @@
+ #endif
+     error = ufs_take_over_host();
+ #if defined(FUXI)
++	printf("FUXI UFS: step5 take_over_host -> %d\n", error);
++#endif
++#if defined(FUXI)
+     if (!error) {
+         static const uint8_t active[6]={0x1b,0,0,0,0x10,0};
+         su.lun=0xd0; /* UFS device well-known LUN, not a block-data LUN. */
