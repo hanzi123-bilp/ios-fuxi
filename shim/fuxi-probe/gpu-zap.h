@@ -154,9 +154,10 @@ void g5_smc_raw4(uint64_t ret[4], uint32_t fn, uint32_t info,
 { uint64_t br[4];
   g5_smc_raw(br, (0x42000c00u | 0x1cu) | 0x80000000u, 0, 0, 0, 0);
   g5_bridge_en = (unsigned)(br[0] & 0xffffu) | ((unsigned)(br[1] & 0xffffu) << 16);
-  g5_smc_raw4(br, (0x42000c00u | 0x1eu) | 0x80000000u, 4,
-      0x9ff600000ULL | 6u, 0x9ff600000ULL | 6u,
-      (0x2000ULL | (1u << 9)), 4u);
+  /* arginfo 0 = four plain values. arginfo 4 would mark arg2 a read-only
+   * buffer, which is not what the bridge interface takes. */
+  g5_smc_raw4(br, (0x42000c00u | 0x1eu) | 0x80000000u, 0,
+      0x9ff600000ULL, 0x2000ULL, 6u, 4u);
   g5_bridge_state = g5_bridge_cr = (unsigned)(br[0] & 0xffffu) | ((unsigned)(br[1] & 0xffffu) << 16); }
 if (!g5_scm(d, G5_SMC(1), 0x82, G5_PAS, G5_META_PA, 0, 0)) return 0xf07;
  d[3] = 6;
