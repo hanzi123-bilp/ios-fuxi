@@ -25,11 +25,15 @@
  * the RSC idle bit as REG_RSCC_SEQ_BUSY_DRV0*4 and the setup table carries
  * byte offsets, so both live in ShengGmuSource.h's RSCC numbering.
  *
- * REG_GBIF_QSB_SIDE0 is the only value not confirmed against gpu.c: no
- * pre-existing loader code writes it. 0x3c03 is the A6XX_GBIF_QSB_SIDE0 dword
- * published with the mainline Adreno register database; it places the four
- * side registers at byte 0xf00c..0xf018 of the Gpu window (0x3d00000/0x40000).
- * TODO: confirm against the pinned registers/adreno/a6xx.xml.
+ * REG_GBIF_QSB_SIDE0 is the only value that no pre-existing loader code writes;
+ * it is 0x3c03 in the pinned registers/adreno/a6xx.xml and places the four side
+ * registers at byte 0xf00c..0xf018 of the Gpu window (0x3d00000/0x40000).
+ *
+ * Every value below was audited against the pinned register databases
+ * (a6xx.xml sha256 1776505dbdb01d03..., a6xx_gmu.xml sha256 9c97dfd68dcc47d8...)
+ * at ianchb/sm8550-mainline 42f3b40c: GMU_GENERAL_8/9/10 use the A7XX variant,
+ * and GPU_GMU_CX_GMU_CX_FAL* use the A6XX variant, both of which are what an
+ * A740 selects.
  */
 #ifndef SHENG_GMU_REGISTERS_H
 #define SHENG_GMU_REGISTERS_H

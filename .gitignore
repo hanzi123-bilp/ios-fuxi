@@ -6,6 +6,7 @@ recovery/
 research/
 # External translator/dependency source and build caches (never vendored)
 deps/
+.cache/
 shim/out/
 xnu/out/
 xnu/out-*/

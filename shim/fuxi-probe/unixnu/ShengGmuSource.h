@@ -53,12 +53,23 @@ static const uint32_t sheng_gmu_window_bytes[5] = {
 #define SHENG_GMU_CORE_GPU_DELTA 0x6a000u
 
 /* ---- chip ids --------------------------------------------------------- */
+/* Pinned a6xx_catalog.c: the record with ADRENO_CHIP_IDS(0x43050a01) "C510v2"
+ * is the one carrying fw { a740_sqe.fw, gmu_gen70200.bin }, and its
+ * .gmu_chipid is 0x7020100 - also the value gpu.c already wrote to
+ * REG_GMU_GENERAL_10. */
 #define SHENG_GMU_CHIP_ID    0x43050a01u   /* A740 (Adreno catalog entry)   */
-#define SHENG_GMU_FW_CHIP_ID 0x07020100u   /* REG_GMU_GENERAL_10, gen70200  */
+#define SHENG_GMU_FW_CHIP_ID 0x07020100u   /* .gmu_chipid, gen70200         */
 
-/* Fault masks (a6xx_gmu.xml.h). */
-#define SHENG_GMU_AO_FATAL_MASK  0x00000010u
-#define SHENG_GMU_CM3_FATAL_MASK 0x00000010u
+/* Fault masks. Computed exactly as UniXNU's prepare-sheng-gmu.py does, from
+ * the pinned a6xx_gmu.xml bitfields:
+ *   GMU_AO_HOST_INTERRUPT_STATUS: WDOG_BITE=0, FENCE_ERR=3,
+ *                                 HOST_AHB_BUS_ERROR=5        -> 0x29
+ *   GMU_GMU2HOST_INTR_INFO:       CM3_FAULT=23               -> 0x800000
+ * The previous 0x10 values were wrong in both directions: bit 4 of the AO
+ * status is DBD_WAKEUP (a normal wake event, i.e. a guaranteed false fault)
+ * and bit 4 of GMU2HOST_INTR_INFO misses every CM3 fault. */
+#define SHENG_GMU_AO_FATAL_MASK  0x00000029u
+#define SHENG_GMU_CM3_FATAL_MASK 0x00800000u
 
 /* ---- RSCC ------------------------------------------------------------- */
 /* RSC idle poll: ShengGmu.c reads REG_RSCC_SEQ_BUSY_DRV0*4 (= byte 0x404). */
