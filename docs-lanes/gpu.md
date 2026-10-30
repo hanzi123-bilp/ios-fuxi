@@ -2573,3 +2573,66 @@ All runs boot iOS 16.7 to SpringBoard with `fuxigpu=1` and the 768 MiB `--gpu-re
 | 0096e | Four cached backings, one submission per frame, targeted cache clean, sleeping wait. 594/596 presents on the GPU, 1.58 ms wall time and **0.72 ms CPU time per present** (clean 0.60, submit 0.03; the 0.93 ms wait is spent asleep). Cache hit 592/594 |
 
 The remaining CPU cost is cleaning the CPU-rendered source rows from the cache.
+
+## GMU cold start through ShengGmu (loader build)
+
+The loader image no longer loads the GMU firmware itself: stage 8 hands the five
+payloads to the vendored UniXNU transport in `shim/fuxi-probe/unixnu/`
+(`fuxi_gmu_cold_start()` → `ShengGmuLoadAndStartHfi`). The probe image and
+`tools/test-fuxi-gpu-probe.py` still compile the in-tree sequence, selected by
+`FUXI_GMU_LEGACY`; the choice is a compile-time macro (`FUXI_GPU_SHENG_GMU`),
+not a runtime branch.
+
+ShengGmu rejects any layout other than these exact extents, so they are fixed
+in `gpu.c` and zeroed through the same checked mapper as the SMMU tables:
+
+| payload | IOVA | bytes | physical |
+| --- | --- | --- | --- |
+| icache | `0x4000` | `0xffc000` | `G_MEM+0x100000` |
+| dummy | `0x60000000` | `0x4000` | `G_MEM+0x1100000` |
+| debug | `0x60400000` | `0x7000` | `G_MEM+0x110c000` |
+| log | `0x6000a000` | `0x4000` | `G_MEM+0x1104000` |
+| hfi | `0x60006000` | `0x4000` | `G_MEM+0x1108000` |
+
+`log` moved from `0x60002000`: with dummy at the firmware-fixed `0x60000000`
+and a full `0x4000`, the old address overlapped it, which ShengGmu refuses.
+All five leaves use MAIR index 0 (`0x44`, Normal Inner/Outer non-cacheable);
+the CPU side is the loader's MMU-off identity map, so neither side caches.
+
+Stage 9 now only publishes PERF/BW/CORE_FW_START/START: the RSCC writes,
+payload load and readback, CM3 release and HFI init all happened in stage 8, and
+repeating them hits a live GMU.
+
+### Reading the stage-8 page (`0x101`)
+
+| word | meaning |
+| --- | --- |
+| 66 | `ShengGmuStatus`: 0 Success, 2 Firmware, 3 Busy, 4 IoError, 5 StateMismatch, 6 Timeout, 8 Poisoned, 9 Fault |
+| 67 | phase: 1 preconditions, 2 RSCC/reset+state, 3 payload load, 4 register config, 5 FW_INIT poll, 6 HFI init, 7 HFI ready |
+| 68 / 69 | observed `CM3_FW_INIT_RESULT` / `HFI_CTRL_STATUS` |
+| 70–73 | hash verified, memory zeroed, reset verified, resources-must-retain |
+| 74 / 75 | `GMU_AO_HOST_INTERRUPT_STATUS` / `GMU_GMU2HOST_INTR_INFO` |
+| 76–78 | IO writes / reads / poll iterations |
+| 79 / 80 / 81 | firmware-ready observed, HFI-ready observed, overall success |
+| 82 | 5 = this build uses ShengGmu (the only marker the decoder relies on) |
+| 83 | bytes in the dummy/log/hfi/debug run (`0x13000`) |
+
+Stage-8 failure codes: `0x80d` = ShengGmu refused or timed out (look at 66/67),
+`0x90b` = stage 9 ran without HFI-ready. `tools/fuxi-gpu-probe.py` prints all of
+this when word 82 is 5.
+
+### What is verified, and what is inferred
+
+| item | basis |
+| --- | --- |
+| window addresses/sizes | decompiled `fuxi.dtb`: kgsl-3d0 `reg`/`reg-names`; CxMisc is `0x1000`, not the previously written `0x10000` |
+| GMU stream id 5 | `qcom,gmu@3d69000` `iommus = <&smmu 5 0>` |
+| all 24 `REG_*` dwords | pinned `a6xx.xml`/`a6xx_gmu.xml` (audited by `tools/check-sheng-gmu-source.py`) |
+| fatal masks `0x29` / `0x800000` | pinned bitfields; the previous `0x10` was `DBD_WAKEUP` on the AO status and undefined on `GMU2HOST_INTR_INFO` |
+| chip ids `0x43050a01` / `0x07020100` | pinned `a6xx_catalog.c` A740 record |
+| firmware 15-record plan, 66844 B, SHA-256 | parsed locally; matches `ShengGmuLoadAndStartHfi`'s `count == 15` |
+| **RSCC byte numbering** | **inferred**: `byte = 4*(D - 0x8c00)`, because Linux's `base + (D<<2)` would put RSC_STATUS0 at `+0x23010`, outside the `0x10000` window the DT maps, and because the GMU node exposes no `rscc` resource at all |
+
+Open: the RSCC base assumption is the one board fact with no measurement behind
+it. A cold start that stops at phase 2 (`StateMismatch`/`IoError`) points there
+first; phase 5 with `Timeout` points at the 10 ms poll bound inside ShengGmu.
