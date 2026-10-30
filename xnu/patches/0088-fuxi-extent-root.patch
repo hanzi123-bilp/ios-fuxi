@@ -1,6 +1,6 @@
 --- a/bsd/dev/sweet_ufs.c
 +++ b/bsd/dev/sweet_ufs.c
-@@ -114,6 +114,99 @@
+@@ -114,6 +114,105 @@
  	bool ready;
  } su;
  
@@ -67,6 +67,12 @@
 +	}
 +	unsigned n = size / (3 * sizeof(uint64_t));
 +	uint64_t want = *blocks, pos = 0;
++	printf("FUXI UFS: %u extents, 0x%llx blocks, partition first 0x%llx (%llu blocks)\n",
++	    n, want, fx_part_first, fx_part_blocks);
++	for (unsigned i = 0; i < n && i < 8; i++) {
++		printf("FUXI UFS: ext[%u] file=0x%llx part=0x%llx count=0x%llx\n", i,
++		    ext[3 * i], ext[3 * i + 1], ext[3 * i + 2]);
++	}
 +	for (unsigned i = 0; i < n && pos < want; i++) {
 +		uint64_t file = ext[3 * i], part = ext[3 * i + 1], count = ext[3 * i + 2];
 +		if (file != pos || count == 0 || part >= fx_part_blocks ||
@@ -177,7 +183,7 @@
  #endif
  	uint32_t cache = 0, wait = 0;
  	PE_parse_boot_argn("ufscache", &cache, sizeof(cache));
-@@ -687,6 +806,21 @@
+@@ -687,6 +806,27 @@
  	if (!error) {
  		error = ufs_find_partition(want);
  	}
@@ -192,6 +198,12 @@
 +			su.nblocks = fx_ext[fx_next - 1].file + fx_ext[fx_next - 1].count;
 +			printf("FUXI UFS: root file in userdata: %u extents, %llu blocks\n",
 +			    fx_next, su.nblocks);
++			for (unsigned i = 0; i < fx_next && i < 8; i++) {
++				uint64_t lba = fx_part_first + fx_ext[i].part;
++				int r = ufs_read_blocks(lba, 1);
++				printf("FUXI UFS: ext[%u] read lba=0x%llx -> %d first=%08x\n", i,
++				    lba, r, r ? 0 : *(uint32_t *)(su.dma + DMA_BOUNCE));
++			}
 +		}
 +	}
 +	if (!fx_root) rw=0;
