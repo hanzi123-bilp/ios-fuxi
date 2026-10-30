@@ -2673,3 +2673,31 @@ would prove or disprove `byte = 4*(D - 0x8c00)`.
 
 Unchanged: the reserved SMMUv2 FSR bit 10 (`0x400`) still reads on both the GMU
 and GPU context banks from programming time, as in every earlier milestone.
+
+## Stage 16 is not a ShengGmu regression (2026-10-30)
+
+`--stage 16` fails at the secure packet with `0xf0c` (`step=10`, `polls=1`,
+`TRUST 1→0`, `RBBM_STATUS=0x800005`, `authenticated=0`, `path=0`, `calls=0`).
+Three builds were compared on the same device, each from a fresh boot:
+
+| build | cold start | embedded zap | stage 16 |
+| --- | --- | --- | --- |
+| `45bdec59` | ShengGmu | `4fd56fef` (adreno-inputs.json) | `0xf0c`, identical numbers |
+| `fe84085e` | ShengGmu | `885734f0` (`a740_zap_full.mbn`, what every earlier image embedded) | `0xf0c`, identical numbers |
+| `7ac263b7` (`-DFUXI_GMU_LEGACY=1`) | in-tree | `885734f0` | `0xf0c`, identical numbers |
+
+Stages 1–13 PASS in all three. So the failure is neither the vendored GMU
+transport nor the zap blob: it predates both. The last recorded stage-16 PASS
+was milestone `m5b` on a different kernel/payload, and nothing since then has
+been compared against it.
+
+The unexplained part is the report itself: `d[3]=10` is only reachable after
+`g5_pas()` returned 1, yet `d[4]` (authenticated) is 0, `d[5]` (SCM calls) is 0
+and `d[38]` (path) is 0. Either those words are clobbered later, or the
+post-mortem re-reads registers that no longer show the fault that stopped the
+loop. Both `g3_faulted()` sources at that point read 0 in the frozen
+diagnostics. The next instrument should latch CP `0x823`, RBBM `0x201`, both
+CB FSRs and GFSR *inside* the failing loop iteration instead of after it.
+
+`shim/fuxi-loader/build.sh` now accepts `FUXI_EXTRA_FLAGS` (the macro switch
+above is one use), so such A/B builds do not need a source edit.

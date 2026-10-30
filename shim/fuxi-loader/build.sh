@@ -42,7 +42,9 @@ pinned = {
  "sqe": "6d38046654333a6a5a4ee77ab67abc24e3c0c5c68237513afe98e94da8fc9fcc",
  # sheng-firmware tree 2c1e2729 qcom/sm8550/sheng/a740_zap.mbn, as pinned by
  # scripts/data/adreno-inputs.json. Only this 12088-byte blob yields the
- # 0x25ac8-byte .gpu_fw size the check below enforces.
+ # 0x25ac8-byte .gpu_fw size the check below enforces. a740_zap_full.mbn
+ # (885734f0, what every earlier image embedded) and this one fail stage 16
+ # identically at the secure packet, so the choice cannot explain 0xf0c.
  "zap": "4fd56fefa82c82a677b6ce09f24368cba47ed1b110d38860196787fb85cc17b4",
 }
 lines = ['.section .gpu_fw,"a"']
@@ -65,7 +67,7 @@ FWPY
 # incbin avoids C absolute pointers in an Image loaded at an arbitrary PA.
 printf '.section .payload,"a"\n.incbin "%s"\n' "$payload" > "$out/payload.S"
 flags=(--target=aarch64-none-elf -O2 -ffreestanding -fno-builtin -nostdlib
-       -fno-pic -fno-stack-protector -mgeneral-regs-only -mstrict-align -Wall -Wextra -Werror -DFUXI=1 -DFUXI_XNU_LOADER=1 -I.. -I../fuxi-probe/unixnu)
+       -fno-pic -fno-stack-protector -mgeneral-regs-only -mstrict-align -Wall -Wextra -Werror -DFUXI=1 -DFUXI_XNU_LOADER=1 -I.. -I../fuxi-probe/unixnu ${FUXI_EXTRA_FLAGS:-})
 # Vendored UniXNU GMU/HFI transport: probe.c includes gpu.c, which calls
 # fuxi_gmu_cold_start() from stage 8, so these must link into the same image.
 unixnu=(../fuxi-probe/unixnu/AdrenoFirmware.c ../fuxi-probe/unixnu/AdrenoHfi.c
