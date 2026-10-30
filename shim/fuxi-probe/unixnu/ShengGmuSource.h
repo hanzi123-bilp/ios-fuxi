@@ -9,11 +9,20 @@
  *   RSCC write order   upstream linux a6xx_gmu.c  a6xx_gmu_rpmh_init()
  *   RSCC offsets       A6XX dword offsets rebased onto the 0x10000 window
  *
- * RSCC numbering. The fuxi DT maps "rscc" at 0x3d50000 for 0x10000 bytes.
- * A6XX whole-GPU dword offsets put the RSC block at 0x8c00, so a register at
- * dword D is written at byte 4*(D-0x8c00) inside that window: SEQ_BUSY_DRV0
- * (0x8d01) is byte 0x404, which is the index shim/fuxi-probe/gpu.c has used
- * since milestone 2. Offsets below are BYTE offsets in that mapping.
+ * RSCC numbering. The fuxi DT maps "rscc" at 0x3d50000 for 0x10000 bytes (on
+ * the kgsl-3d0 node; the qcom,gmu@3d69000 node has only gmu/gmu_pdc/
+ * gmu_ao_blk_dec0, so there is no GMU-side rscc resource). Linux's accessors
+ * are gmu->rscc + (offset << 2) with A6XX whole-GPU dwords, which for this
+ * 0x10000 window would put RSC_STATUS0 at +0x23010 - outside the mapping. The
+ * numbering that fits the window is therefore the rebased one:
+ *
+ *     byte = 4 * (D - 0x8c00)
+ *
+ * i.e. the window base corresponds to A6XX dword 0x8c00. SEQ_BUSY_DRV0
+ * (0x8d01) becomes byte 0x404, which is the index shim/fuxi-probe/gpu.c has
+ * used since milestone 2. Whether the base really is 0x8c00 is inferred, not
+ * measured; it is the only model consistent with both the DT and the existing
+ * hardware-exercised code.
  */
 #ifndef SHENG_GMU_SOURCE_H
 #define SHENG_GMU_SOURCE_H
@@ -31,14 +40,15 @@ static const uint8_t sheng_gmu_firmware_sha256[32] = {
 
 /* ---- windows ---------------------------------------------------------- *
  * Order matches enum {Core, Rscc, Pdc, Gpu, CxMisc} in ShengGmu.h.
- * Core is the GMU register block inside kgsl_3d0_reg_memory.
+ * Every range below is the fuxi.dtb "reg" of the kgsl-3d0 node except Core,
+ * which is kgsl_3d0_reg_memory + 0x6a000 (the GMU block inside it).
  */
 static const uint64_t sheng_gmu_window_physical[5] = {
-    0x03d6a000ull,   /* Core   (0x03d00000 + 0x6a000) */
+    0x03d6a000ull,   /* Core   (kgsl_3d0_reg_memory + 0x6a000) */
     0x03d50000ull,   /* Rscc   (DT "rscc",         0x10000) */
-    0x03d8b000ull,   /* Pdc    (DT "isense_cntl",  0x2000)  */
+    0x03d8b000ull,   /* Pdc    (DT "isense_cntl",  0x2000) AOP-owned, not written */
     0x03d00000ull,   /* Gpu    (DT kgsl_3d0_reg_memory, 0x40000) */
-    0x03d9e000ull,   /* CxMisc (DT "cx_misc",      0x10000) */
+    0x03d9e000ull,   /* CxMisc (DT "cx_misc",      0x1000) */
 };
 
 static const uint32_t sheng_gmu_window_bytes[5] = {
@@ -46,7 +56,7 @@ static const uint32_t sheng_gmu_window_bytes[5] = {
     0x10000u,   /* Rscc  */
     0x2000u,    /* Pdc   */
     0x40000u,   /* Gpu   */
-    0x10000u,   /* CxMisc */
+    0x1000u,    /* CxMisc: only TCM_RET_CNTL at 0xe4 is touched */
 };
 
 /* GMU core dword -> GPU window byte offset: dword*4 - CORE_GPU_DELTA. */
