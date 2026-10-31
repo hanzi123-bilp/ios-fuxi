@@ -97,7 +97,10 @@
 +void fuxi_storage_probe(void);
 +void fuxi_storage_probe(void)
 +{
-+ uint32_t requested=0;
++ uint32_t requested=0, early=0;
++ /* This probe runs inside bsd_init, before root mount. On fuxi that was seen
++  * to kill the panel (no console output at all), so keep it opt-in for debug. */
++ if (!PE_parse_boot_argn("fuxi_ufs_early",&early,sizeof(early)) || early!=1) return;
 + if (!PE_parse_boot_argn("fuxi_ufs_probe",&requested,sizeof(requested)) || requested!=1) return;
 + int error=sweet_ufs_init();
 + printf("FUXI UFS read-only probe result=%d\n",error);
